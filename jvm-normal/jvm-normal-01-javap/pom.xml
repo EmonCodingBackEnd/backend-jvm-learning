@@ -10,7 +10,7 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>jvm-normal-01</artifactId>
+    <artifactId>jvm-normal-01-javap</artifactId>
 
     <dependencies>
         <!-- 定义三方包 beg -->
