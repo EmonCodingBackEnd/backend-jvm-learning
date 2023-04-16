@@ -4,7 +4,7 @@
 
 JVM：
 
-https://www.bilibili.com/video/BV1PJ411n7xZ?p=34&spm_id_from=pageDriver&vd_source=b850b3a29a70c8eb888ce7dff776a5d1
+https://www.bilibili.com/video/BV1PJ411n7xZ?p=35&spm_id_from=pageDriver&vd_source=b850b3a29a70c8eb888ce7dff776a5d1
 
 JDK8文档：
 
@@ -329,6 +329,14 @@ ClassLoader.getSystemClassLoader()
 方法四：获取调用者的ClassLoader
 
 DriverManager.getCallerClassLoader()
+
+
+
+#### 双亲委派机制
+
+Java虚拟机对class文件采用的是**按需加载**的方式，也就是说当需要使用该类时才会将它的class文件加载到内存生成class对象，而且加载某个类的class文件时，Java虚拟机采用的是**双亲委派模式**，即把请求交由父类处理，它是一种任务委派模式。
+
+
 
 ## JVM的架构模型
 
