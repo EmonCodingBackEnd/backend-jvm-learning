@@ -33,6 +33,7 @@ build/
 .vscode/
 
 ### 自定义 ###
-
-### 管控netty文件夹 ###
-netty/spring/**
+jvm
+/java_pid*.hprof
+/java_pid*
+/logs
