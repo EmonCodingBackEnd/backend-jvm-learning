@@ -7,7 +7,7 @@ public class LoopRun {
         while (true) {
             try {
                 // 1、创建自定义类加载器的实例
-                MyClassLoader loader = new MyClassLoader("C:\\Job\\JobResource\\IdeaProjects\\backend-jvm-learning\\jvm-02-classloader\\src\\main\\java");
+                MyClassLoader loader = new MyClassLoader("/Users/wenqiu/IdeaProjects/backend-jvm-learning/jvm-02-classloader/src/main/java");
                 // 2、加载指定的类
                 Class<?> clazz = loader.findClass("com.coding.jvm02.hotswap.Demo1");
                 // 3、创建运行时类的实例

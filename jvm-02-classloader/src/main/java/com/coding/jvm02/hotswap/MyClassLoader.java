@@ -46,6 +46,6 @@ public class MyClassLoader extends ClassLoader {
     }
 
     private String getClassFile(String className) {
-        return rootDir + "\\" + className.replace('.', '\\') + ".class";
+        return rootDir + "/" + className.replace('.', '/') + ".class";
     }
 }
