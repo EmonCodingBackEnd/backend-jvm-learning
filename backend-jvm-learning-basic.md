@@ -11588,7 +11588,7 @@ jdk.internal.loader.ClassLoaders$PlatformClassLoader
 
 ​	jps(JVM Process Status Tool)命令用于查看系统内所有的JVM进程，可根据参数选项指定是否显示JVM的执行主类［包含main()方法的类］，以及进程的本地JVMID(Local Virtual Machine Identifier)，对于本地JVM进程来说，进程的本地JVMID与操作系统的进程ID是一致的。简单来说，就是Java提供的一个显示当前所有Java进程pid的命令，和Linux系统里的ps命令很相似，ps命令主要是用来显示当前系统的进程情况，比如查看进程列表和进程ID。在日常工作中，此命令也是最常用的命令之一。
 
-​	jps的基本使用语法如下：
+​	jps的基本使用语法如下：	
 
 ```bash
 % jps -help
@@ -11599,12 +11599,695 @@ Definitions:
     <hostid>:      <hostname>[:<port>]
 ```
 
+| 基本语法                |
+| ----------------------- |
+| jps [options]  [hostid] |
+
 **1 [ options ]选项说明**
 
 ​	jps工具[options]主要选项如下表所示。
 <div style="text-align:center;font-weight:bold;">jps命令[options]选项说明</div>
 
 ![image-20241205141628383](images/image-20241205141628383.png)
+
+**2 [hostid]说明**
+
+​	hostid表示目标主机的主机名或IP地址，如果省略该参数，则目标主机为本地主机。如果想要远程监控主机上的Java程序，需要安装jstatd（见20.9节）。对于网络安全要求非常严格的场所，需要自定义策略文件来满足对特定的主机或网络的访问，但是这种技术容易受到IP地址欺诈攻击。如果由于安全问题无法通过定制的策略文件处理，那么最安全的操作是在主机本地使用jstat（见21.3节）和jps工具。
+
+**3 使用案例**
+
+​	Mac上启动Tomcat（一种Web应用服务器，通过Homebrew安装），然后使用ps命令查看Tomcat进程ID使用，如下所示。
+
+```bash
+% ps -ef|grep tomcat
+```
+
+```bash
+  501 77188     1   0  2:33下午 ??         0:02.11 /opt/homebrew/opt/openjdk/bin/java -Djava.util.logging.config.file=/opt/homebrew/Cellar/tomcat@8/8.5.100/libexec/conf/logging.properties -Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager -Djdk.tls.ephemeralDHKeySize=2048 -Djava.protocol.handler.pkgs=org.apache.catalina.webresources -Dorg.apache.catalina.security.SecurityListener.UMASK=0027 -Dignore.endorsed.dirs= -classpath /opt/homebrew/Cellar/tomcat@8/8.5.100/libexec/bin/bootstrap.jar:/opt/homebrew/Cellar/tomcat@8/8.5.100/libexec/bin/tomcat-juli.jar -Dcatalina.base=/opt/homebrew/Cellar/tomcat@8/8.5.100/libexec -Dcatalina.home=/opt/homebrew/Cellar/tomcat@8/8.5.100/libexec -Djava.io.tmpdir=/opt/homebrew/Cellar/tomcat@8/8.5.100/libexec/temp org.apache.catalina.startup.Bootstrap start
+  501 77505 41579   0  2:34下午 ttys000    0:00.01 grep tomcat
+```
+
+​	可以看到进程ID是77188。使用jps -l命令查看，如下所示。
+
+```bash
+% jps -l
+20065 
+60116 com.intellij.idea.Main
+77188 org.apache.catalina.startup.Bootstrap
+77965 sun.tools.jps.Jps
+```
+
+​	可以查看到Tomcat进程ID也是77188，与ps命令一致。接下来测试jps命令的其他参数选项。
+
+1、-q选项：只输出进程ID，省略主类名称
+
+```bash
+% jps -q
+20065
+78192
+60116
+77188
+```
+
+2、-m选项：输出JVM进程启动时传递给主类main()方法的参数
+
+```bash
+% jps -m
+20065 
+60116 Main
+77188 Bootstrap start
+78301 Jps -m
+```
+
+3、-v选项：查看输出JVM进程启动时的JVM参数
+
+```bash
+% jps -v
+20065  -Djna.nounpack=true -Djna.nosys=true -Djna.noclasspath=true -Djna.library.path=/Applications/JetBrains Toolbox.app/Contents/MacOS -Djna.boot.library.path=/Applications/JetBrains Toolbox.app/Contents/MacOS -Dskiko.library.path=/Applications/JetBrains Toolbox.app/Contents/MacOS -Duser.dir=/Applications/JetBrains Toolbox.app/Contents/MacOS -Dskiko.metal.gpu.priority=integrated -Xmx160m -Xms8m -Xss384k -XX:+UnlockExperimentalVMOptions -XX:+CreateCoredumpOnCrash -XX:MetaspaceSize=16m -XX:MinMetaspaceFreeRatio=10 -XX:MaxMetaspaceFreeRatio=10 -XX:+UseCompressedOops -XX:+UseCompressedClassPointers -XX:+UseSerialGC -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=10 -XX:-ShrinkHeapInSteps --add-opens=java.desktop/sun.awt=ALL-UNNAMED --add-opens=java.desktop/sun.awt.resources=ALL-UNNAMED --add-opens=java.desktop/com.jetbrains.desktop=ALL-UNNAMED vfprintf exit abort -DTOOLBOX_VERSION=2.5.2.35332 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/Users/wenqiu/Library/Logs/JetBrains/Toolbox/toolbox-oom-20065.hprof -XX:ErrorFil
+60116 Main abort vfprintf -XX:ErrorFile=/Users/wenqiu/java_error_in_idea_%p.log -XX:HeapDumpPath=/Users/wenqiu/java_error_in_idea.hprof -Xms128m -Xmx2048m -XX:ReservedCodeCacheSize=512m -XX:+HeapDumpOnOutOfMemoryError -XX:-OmitStackTraceInFastThrow -XX:CICompilerCount=2 -XX:+IgnoreUnrecognizedVMOptions -ea -Dsun.io.useCanonCaches=false -Dsun.java2d.metal=true -Djbr.catch.SIGABRT=true -Djdk.http.auth.tunneling.disabledSchemes="" -Djdk.attach.allowAttachSelf=true -Djdk.module.illegalAccess.silent=true -Djdk.nio.maxCachedBufferSize=2097152 -Djava.util.zip.use.nio.for.zip.file.access=true -Dkotlinx.coroutines.debug=off -XX:+UnlockDiagnosticVMOptions -XX:TieredOldPercentage=100000 -Dapple.awt.application.appearance=system -Xmx2048m -Dide.managed.by.toolbox=/Applications/JetBrains Toolbox.app/Contents/MacOS/jetbrains-toolbox -Dtoolbox.notification.token=a5149d88-e0f9-43f8-9038-51a8f4e05984 -Dtoolbox.notification.portFile=/Users/wenqiu/Library/Caches/JetBrains/Toolbox/ports/8883a081-ad3c-4c00-99bf-7999bcfc74db.port -Djb.vmOpti
+77188 Bootstrap --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED -Djava.util.logging.config.file=/opt/homebrew/Cellar/tomcat@8/8.5.100/libexec/conf/logging.properties -Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager -Djdk.tls.ephemeralDHKeySize=2048 -Djava.protocol.handler.pkgs=org.apache.catalina.webresources -Dorg.apache.catalina.security.SecurityListener.UMASK=0027 -Dignore.endorsed.dirs= -Dcatalina.base=/opt/homebrew/Cellar/tomcat@8/8.5.100/libexec -Dcatalina.home=/opt/homebrew/Cellar/tomcat@8/8.5.100/libexec -Djava.io.tmpdir=/opt/homebrew/Cellar/tomcat@8/8.5.100/libexec/temp
+78406 Jps -Dapplication.home=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home -Xms8m
+```
+
+## 21.3 jstat：查看JVM统计信息
+
+​	jstat(JVM Statistics Monitoring Tool)用于收集JVM各方面的运行数据，显示本地或远程JVM进程中的类装载、内存、垃圾收集、JIT编译等运行数据。在没有图形用户界面时，只提供了纯文本控制台环境的服务器上，它是运行期定位JVM性能问题的首选工具。常用于检测垃圾回收问题以及内存泄漏问题。它的功能非常强大，可以通过它查看堆信息的详细情况。
+
+​	jstat的基本使用语法如下。
+
+```bash
+% jstat -help
+Usage: jstat -help|-options
+       jstat -<option> [-t] [-h<lines>] <vmid> [<interval> [<count>]]
+
+Definitions:
+  <option>      An option reported by the -options option
+  <vmid>        Virtual Machine Identifier. A vmid takes the following form:
+                     <lvmid>[@<hostname>[:<port>]]
+                Where <lvmid> is the local vm identifier for the target
+                Java virtual machine, typically a process id; <hostname> is
+                the name of the host running the target Java virtual machine;
+                and <port> is the port number for the rmiregistry on the
+                target host. See the jvmstat documentation for a more complete
+                description of the Virtual Machine Identifier.
+  <lines>       Number of samples between header lines.
+  <interval>    Sampling interval. The following forms are allowed:
+                    <n>["ms"|"s"]
+                Where <n> is an integer and the suffix specifies the units as 
+                milliseconds("ms") or seconds("s"). The default units are "ms".
+  <count>       Number of samples to take before terminating.
+  -J<flag>      Pass <flag> directly to the runtime system.
+```
+
+| 基本语法                                                    |
+| ----------------------------------------------------------- |
+| jsat -<option>[-t] [-h<lines>] <vmid> [<interval>[<count>]] |
+
+**1 [options]选项说明**
+
+<div style="text-align:center;font-weight:bold;">jstat命令[ options ]选项说明</div>
+
+<img src="images/image-20241205145719527.png" alt="image-20241205145719527" style="zoom:50%;" />
+
+**2 [-t]参数说明**
+
+​	[-t]参数可以在输出信息前加上一个Timestamp列，显示程序的运行时间。可以比较Java进程的启动时间以及总GC时间（GCT列），或者两次测量的间隔时间以及总GC时间的增量，来得出GC时间占运行时间的比例。如果该比例超过20%，则说明目前堆的压力较大；如果该比例超过90%，则说明堆里几乎没有可用空间，随时都可能抛出OOM异常。
+
+**3 [-h&lt;lines&gt;]参数说明**
+
+​	[-h]参数可以在周期性数据输岀时，输出设定的行数的数据后输出一个表头信息。
+
+**4 [interval]参数说明**
+
+​	[interval]参数用于指定输出统计数据的周期，单位为毫秒，简单来说就是查询间隔时间。
+
+**5 [count]参数说明**
+
+​	[count]用于指定查询的总次数。
+
+**6 使用案例**
+
+​	由于jstat参数选项比较多，这里只列举一个启动了Tomcat的Linux服务器案例，查看其监视状态，命令如下所示。
+
+```bash
+# 查看进程ID
+% jps
+# 查看进程GC信息
+% jstat -gc 77188
+ # 每隔1s打印一次进程信息，打印10次，并且加上时间戳
+% jstat -gc -t 77188 1000 10
+ # 每隔1s打印一次进程信息，打印10次，并且加上时间戳；且每5行输出一次表头信息
+% jstat -gc -t -h5 77188 1000 10
+```
+
+​	运行结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">jstat命令运行结果</div>
+
+![image-20241205152239505](images/image-20241205152239505.png)
+
+​	运行结果的各列表示的含义如下表所示。
+
+<div style="text-align:center;font-weight:bold;">jstat命令运行结果说明</div>
+
+<img src="images/image-20241205152543278.png" alt="image-20241205152543278" style="zoom:50%;" />
+
+​	jstat还可以用来判断是否出现内存泄漏，步骤如下。
+
+1、在长时间运行的Java程序中，可以运行jstat命令连续获取多行性能数据，并取这几行数据中OU列（即已占用的老年代内存）的最小值。
+
+2、每隔一段较长的时间重复一次上述操作，获得多组OU最小值。如果这些值呈上涨趋势，则说明该Java程序的老年代内存已使用量在不断上涨，这意味着无法回收的对象在不断增加，因此很有可能存在内存泄漏。
+
+## 21.4 jinfo：实时查看和修改JVM配置参数
+
+​	jinfo(Configuration Info for Java)可用于查看和调整JVM的配置参数。在很多情况下，Java应用程序不会指定所有的JVM参数。而此时，开发人员可能不知道某一个具体的JVM参数的默认值。在这种情况下，可能需要通过查找文档获取某个参数的默认值。这个查找过程可能是非常艰难的。但有了jinfo工具，开发人员可以很方便地找到JVM参数的当前值。上面讲解的jps -v命令虽然可以查看JVM启动时显示指定的参数列表，但是如果想要知道未被显式指定的参数的系统默认值，就需要用到jinfo工具了。
+
+​	第二个作用就是在程序运行时修改部分参数，并使之立即生效。并非所有参数都支持动态修改，只有被标记为manageable的参数可以被实时修改。其实，这个修改能力是极其有限的，使用下面的命令查看被标记为manageable的参数。
+
+```bash
+% java -XX:+PrintFlagsFinal -version | grep manageable
+```
+
+```bash
+     intx CMSAbortablePrecleanWaitMillis            = 100                                 {manageable}
+     intx CMSTriggerInterval                        = -1                                  {manageable}
+     intx CMSWaitDuration                           = 2000                                {manageable}
+     bool HeapDumpAfterFullGC                       = false                               {manageable}
+     bool HeapDumpBeforeFullGC                      = false                               {manageable}
+     bool HeapDumpOnOutOfMemoryError                = false                               {manageable}
+    ccstr HeapDumpPath                              =                                     {manageable}
+    uintx MaxHeapFreeRatio                          = 100                                 {manageable}
+    uintx MinHeapFreeRatio                          = 0                                   {manageable}
+     bool PrintClassHistogram                       = false                               {manageable}
+     bool PrintClassHistogramAfterFullGC            = false                               {manageable}
+     bool PrintClassHistogramBeforeFullGC           = false                               {manageable}
+     bool PrintConcurrentLocks                      = false                               {manageable}
+     bool PrintGC                                   = false                               {manageable}
+     bool PrintGCDateStamps                         = false                               {manageable}
+     bool PrintGCDetails                            = false                               {manageable}
+     bool PrintGCID                                 = false                               {manageable}
+     bool PrintGCTimeStamps                         = false                               {manageable}
+java version "1.8.0_421"
+Java(TM) SE Runtime Environment (build 1.8.0_421-b09)
+Java HotSpot(TM) 64-Bit Server VM (build 25.421-b09, mixed mode)
+```
+
+​	jinfo的基本使用语法如下。
+
+```bash
+% jinfo -help
+Usage:
+    jinfo [option] <pid>
+        (to connect to running process)
+    jinfo [option] <executable <core>
+        (to connect to a core file)
+    jinfo [option] [server_id@]<remote server IP or hostname>
+        (to connect to remote debug server)
+
+where <option> is one of:
+    -flag <name>         to print the value of the named VM flag
+    -flag [+|-]<name>    to enable or disable the named VM flag
+    -flag <name>=<value> to set the named VM flag to the given value
+    -flags               to print VM flags
+    -sysprops            to print Java system properties
+    <no option>          to print both of the above
+    -h | -help           to print this help message
+```
+
+| 基本语法            |
+| ------------------- |
+| jinfo [options] pid |
+
+**1 [ options ]选项说明**
+
+​	jinfo工具options主要选项如下表所示。
+
+![image-20241205154353759](images/image-20241205154353759.png)
+
+**2 pid说明**
+
+​	Java进程ID，必须要加上。
+
+**3 使用案例**
+
+​	由于jinfo可以查看JVM配置信息，也可用于调整JVM的配置参数，下面分两类案例分别讲解如何使用。
+
+**4 jinfo用于查看JVM配置信息案例**
+
+​	如下代码主要用于启动一个JVM进程，方便通过该进程查看JVM相关配置信息。
+
+<div style="text-align:center;font-weight:bold;">jinfo查看JVM配置参数案例</div>
+
+```java
+package com.coding.jvm07.cmd;
+
+import java.util.Scanner;
+
+public class ScannerTest {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        String info = scanner.next();
+    }
+}
+```
+
+​	程序很简单，只需要保证程序在执行状态即可。首先使用jps命令查看进程ID，如下所示。
+
+```bash
+# 查看进程ID
+% jps -l
+86721 jdk.jcmd/sun.tools.jps.Jps
+20065 
+86172 com.intellij.idea.Main
+86510 com.coding.jvm07.cmd.ScannerTest
+```
+
+​	上面出现两个结果，ScannerTest程序的进程ID是81928，另外几个进程ID表示jps命令本身的进程以及IDEA开发工具的进程。下面使用jinfo命令来查看JVM配置参数，命令如下。
+
+1、根据进程ID查询全部参数和系统属性。
+
+```bash
+# 查看全部参数和系统属性
+% jinfo 86510
+```
+
+```bash
+Java System Properties:
+#Thu Dec 05 20:59:18 CST 2024
+java.runtime.name=Java(TM) SE Runtime Environment
+sun.boot.library.path=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib
+java.vm.version=25.421-b09
+gopherProxySet=false
+java.vm.vendor=Oracle Corporation
+java.vendor.url=http\://java.oracle.com/
+path.separator=\:
+java.rmi.server.randomIDs=true
+java.vm.name=Java HotSpot(TM) 64-Bit Server VM
+file.encoding.pkg=sun.io
+user.country=CN
+sun.java.launcher=SUN_STANDARD
+sun.os.patch.level=unknown
+java.vm.specification.name=Java Virtual Machine Specification
+user.dir=/Users/wenqiu/IdeaProjects/backend-jvm-learning
+java.runtime.version=1.8.0_421-b09
+java.awt.graphicsenv=sun.awt.CGraphicsEnvironment
+java.endorsed.dirs=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/endorsed
+os.arch=aarch64
+java.io.tmpdir=/var/folders/lx/7npzn7997ps3t7g11876yqvw0000gn/T/
+line.separator=\n
+socksProxyPort=7890
+java.vm.specification.vendor=Oracle Corporation
+https.proxyHost=127.0.0.1
+os.name=Mac OS X
+sun.jnu.encoding=UTF-8
+java.library.path=/Users/wenqiu/Library/Java/Extensions\:/Library/Java/Extensions\:/Network/Library/Java/Extensions\:/System/Library/Java/Extensions\:/usr/lib/java\:.
+http.proxyPort=7890
+java.specification.name=Java Platform API Specification
+java.class.version=52.0
+sun.management.compiler=HotSpot 64-Bit Tiered Compilers
+os.version=15.1.1
+http.nonProxyHosts=192.168.0.0/16|*.192.168.0.0/16|10.0.0.0/8|*.10.0.0.0/8|172.16.0.0/12|*.172.16.0.0/12|127.0.0.1|localhost|*.localhost|local|*.local|timestamp.apple.com|*.timestamp.apple.com|sequoia.apple.com|*.sequoia.apple.com|seed-sequoia.siri.apple.com|*.seed-sequoia.siri.apple.com
+user.home=/Users/wenqiu
+user.timezone=Asia/Shanghai
+java.awt.printerjob=sun.lwawt.macosx.CPrinterJob
+file.encoding=UTF-8
+java.specification.version=1.8
+java.class.path=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/charsets.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/deploy.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/cldrdata.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/dnsns.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/jaccess.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/jfxrt.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/localedata.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/nashorn.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/sunec.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/sunjce_provider.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/sunpkcs11.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/zipfs.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/javaws.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jce.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jfr.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jfxswt.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jsse.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/management-agent.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/plugin.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/resources.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/rt.jar\:/Users/wenqiu/IdeaProjects/backend-jvm-learning/jvm-07-tools/target/classes\:/Users/wenqiu/.m2/repository/junit/junit/4.6/junit-4.6.jar\:/Users/wenqiu/.m2/repository/org/projectlombok/lombok/1.18.30/lombok-1.18.30.jar\:/Applications/IntelliJ IDEA.app/Contents/lib/idea_rt.jar
+user.name=wenqiu
+socksProxyHost=127.0.0.1
+java.vm.specification.version=1.8
+sun.java.command=com.coding.jvm07.cmd.ScannerTest
+java.home=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre
+sun.arch.data.model=64
+user.language=zh
+java.specification.vendor=Oracle Corporation
+awt.toolkit=sun.lwawt.macosx.LWCToolkit
+java.vm.info=mixed mode
+java.version=1.8.0_421
+java.ext.dirs=/Users/wenqiu/Library/Java/Extensions\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext\:/Library/Java/Extensions\:/Network/Library/Java/Extensions\:/System/Library/Java/Extensions\:/usr/lib/java
+sun.boot.class.path=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/resources.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/rt.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jsse.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jce.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/charsets.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jfr.jar\:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/classes
+http.proxyHost=127.0.0.1
+java.vendor=Oracle Corporation
+java.specification.maintenance.version=5
+file.separator=/
+java.vendor.url.bug=http\://bugreport.sun.com/bugreport/
+sun.io.unicode.encoding=UnicodeBig
+sun.cpu.endian=little
+https.proxyPort=7890
+socksNonProxyHosts=192.168.0.0/16|*.192.168.0.0/16|10.0.0.0/8|*.10.0.0.0/8|172.16.0.0/12|*.172.16.0.0/12|127.0.0.1|localhost|*.localhost|local|*.local|timestamp.apple.com|*.timestamp.apple.com|sequoia.apple.com|*.sequoia.apple.com|seed-sequoia.siri.apple.com|*.seed-sequoia.siri.apple.com
+ftp.nonProxyHosts=192.168.0.0/16|*.192.168.0.0/16|10.0.0.0/8|*.10.0.0.0/8|172.16.0.0/12|*.172.16.0.0/12|127.0.0.1|localhost|*.localhost|local|*.local|timestamp.apple.com|*.timestamp.apple.com|sequoia.apple.com|*.sequoia.apple.com|seed-sequoia.siri.apple.com|*.seed-sequoia.siri.apple.com
+sun.cpu.isalist=
+
+VM Flags:
+-XX:CICompilerCount=12 -XX:InitialHeapSize=2147483648 -XX:MaxHeapSize=32203866112 -XX:MaxNewSize=10734272512 -XX:MinHeapDeltaBytes=524288 -XX:NewSize=715653120 -XX:OldSize=1431830528 -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:+UseParallelGC 
+
+VM Arguments:
+jvm_args: -javaagent:/Applications/IntelliJ IDEA.app/Contents/lib/idea_rt.jar=65060:/Applications/IntelliJ IDEA.app/Contents/bin -Dfile.encoding=UTF-8 
+java_command: com.coding.jvm07.cmd.ScannerTest
+java_class_path (initial): /Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/charsets.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/deploy.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/cldrdata.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/dnsns.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/jaccess.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/jfxrt.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/localedata.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/nashorn.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/sunec.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/sunjce_provider.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/sunpkcs11.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/zipfs.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/javaws.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jce.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jfr.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jfxswt.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jsse.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/management-agent.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/plugin.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/resources.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/rt.jar:/Users/wenqiu/IdeaProjects/backend-jvm-learning/jvm-07-tools/target/classes:/Users/wenqiu/.m2/repository/junit/junit/4.6/junit-4.6.jar:/Users/wenqiu/.m2/repository/org/projectlombok/lombok/1.18.30/lombok-1.18.30.jar:/Applications/IntelliJ IDEA.app/Conte
+Launcher Type: SUN_STANDARD
+```
+
+​	结果中含有Java系统属性(System Properties)和JVM参数(VM Flags)。
+
+2、根据进程ID查询系统属性（选项：-sysprops）命令如下。
+
+```bash
+# 查看系统属性
+% jinfo -sysprops 86510
+```
+
+​	通过Java代码获取系统属性如下代码所示。
+
+<div style="text-align:center;font-weight:bold;">获取系统属性</div>
+
+```java
+package com.coding.jvm07.cmd;
+
+import java.util.Properties;
+
+public class SystemProTest {
+    public static void main(String[] args) {
+        Properties properties = System.getProperties();
+        String[] split = properties.toString().split(",");
+        for (String str : split) {
+            System.out.println(str);
+        }
+    }
+}
+
+```
+
+​	运行结果如下图所示（部分结果）。
+
+<div style="text-align:center;font-weight:bold;">Java代码获取系统属性</div>
+
+```bash
+{java.runtime.name=Java(TM) SE Runtime Environment
+ sun.boot.library.path=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib
+ java.vm.version=25.421-b09
+ gopherProxySet=false
+ java.vm.vendor=Oracle Corporation
+ java.vendor.url=http://java.oracle.com/
+ path.separator=:
+ java.vm.name=Java HotSpot(TM) 64-Bit Server VM
+ file.encoding.pkg=sun.io
+ user.country=CN
+ sun.java.launcher=SUN_STANDARD
+ sun.os.patch.level=unknown
+ java.vm.specification.name=Java Virtual Machine Specification
+ user.dir=/Users/wenqiu/IdeaProjects/backend-jvm-learning
+ java.runtime.version=1.8.0_421-b09
+ java.awt.graphicsenv=sun.awt.CGraphicsEnvironment
+ java.endorsed.dirs=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/endorsed
+ os.arch=aarch64
+ java.io.tmpdir=/var/folders/lx/7npzn7997ps3t7g11876yqvw0000gn/T/
+ line.separator=
+
+ socksProxyPort=7890
+ java.vm.specification.vendor=Oracle Corporation
+ https.proxyHost=127.0.0.1
+ os.name=Mac OS X
+ sun.jnu.encoding=UTF-8
+ java.library.path=/Users/wenqiu/Library/Java/Extensions:/Library/Java/Extensions:/Network/Library/Java/Extensions:/System/Library/Java/Extensions:/usr/lib/java:.
+ http.proxyPort=7890
+ java.specification.name=Java Platform API Specification
+ java.class.version=52.0
+ sun.management.compiler=HotSpot 64-Bit Tiered Compilers
+ os.version=15.1.1
+ http.nonProxyHosts=192.168.0.0/16|*.192.168.0.0/16|10.0.0.0/8|*.10.0.0.0/8|172.16.0.0/12|*.172.16.0.0/12|127.0.0.1|localhost|*.localhost|local|*.local|timestamp.apple.com|*.timestamp.apple.com|sequoia.apple.com|*.sequoia.apple.com|seed-sequoia.siri.apple.com|*.seed-sequoia.siri.apple.com
+ user.home=/Users/wenqiu
+ user.timezone=
+ java.awt.printerjob=sun.lwawt.macosx.CPrinterJob
+ file.encoding=UTF-8
+ java.specification.version=1.8
+ java.class.path=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/charsets.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/deploy.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/cldrdata.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/dnsns.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/jaccess.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/jfxrt.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/localedata.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/nashorn.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/sunec.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/sunjce_provider.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/sunpkcs11.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext/zipfs.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/javaws.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jce.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jfr.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jfxswt.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jsse.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/management-agent.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/plugin.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/resources.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/rt.jar:/Users/wenqiu/IdeaProjects/backend-jvm-learning/jvm-07-tools/target/classes:/Users/wenqiu/.m2/repository/junit/junit/4.6/junit-4.6.jar:/Users/wenqiu/.m2/repository/org/projectlombok/lombok/1.18.30/lombok-1.18.30.jar:/Applications/IntelliJ IDEA.app/Contents/lib/idea_rt.jar
+ user.name=wenqiu
+ socksProxyHost=127.0.0.1
+ java.vm.specification.version=1.8
+ sun.java.command=com.coding.jvm07.cmd.SystemProTest
+ java.home=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre
+ sun.arch.data.model=64
+ user.language=zh
+ java.specification.vendor=Oracle Corporation
+ awt.toolkit=sun.lwawt.macosx.LWCToolkit
+ java.vm.info=mixed mode
+ java.version=1.8.0_421
+ java.ext.dirs=/Users/wenqiu/Library/Java/Extensions:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/ext:/Library/Java/Extensions:/Network/Library/Java/Extensions:/System/Library/Java/Extensions:/usr/lib/java
+ sun.boot.class.path=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/resources.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/rt.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jsse.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jce.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/charsets.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib/jfr.jar:/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/classes
+ http.proxyHost=127.0.0.1
+ java.vendor=Oracle Corporation
+ java.specification.maintenance.version=5
+ file.separator=/
+ java.vendor.url.bug=http://bugreport.sun.com/bugreport/
+ sun.io.unicode.encoding=UnicodeBig
+ sun.cpu.endian=little
+ https.proxyPort=7890
+ socksNonProxyHosts=192.168.0.0/16|*.192.168.0.0/16|10.0.0.0/8|*.10.0.0.0/8|172.16.0.0/12|*.172.16.0.0/12|127.0.0.1|localhost|*.localhost|local|*.local|timestamp.apple.com|*.timestamp.apple.com|sequoia.apple.com|*.sequoia.apple.com|seed-sequoia.siri.apple.com|*.seed-sequoia.siri.apple.com
+ ftp.nonProxyHosts=192.168.0.0/16|*.192.168.0.0/16|10.0.0.0/8|*.10.0.0.0/8|172.16.0.0/12|*.172.16.0.0/12|127.0.0.1|localhost|*.localhost|local|*.local|timestamp.apple.com|*.timestamp.apple.com|sequoia.apple.com|*.sequoia.apple.com|seed-sequoia.siri.apple.com|*.seed-sequoia.siri.apple.com
+ sun.cpu.isalist=}
+```
+
+​	通过比较两者结果一致。
+
+3、查看全部JVM参数配置（选项：-flags），命令如下
+
+```bash
+# 查看全部JVM参数配置
+% jinfo -flags 86510
+```
+
+```bash
+VM Flags:
+-XX:CICompilerCount=12 -XX:InitialHeapSize=2147483648 -XX:MaxHeapSize=32203866112 -XX:MaxNewSize=10734272512 -XX:MinHeapDeltaBytes=524288 -XX:NewSize=715653120 -XX:OldSize=1431830528 -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:+UseParallelGC 
+```
+
+​	可以看到里面包含初始堆大小、最大堆大小等参数配置。
+
+4、查看某个Java进程的具体参数的值（选项：-flag name），命令如下。
+
+```bash
+# 查看JVM是否使用了ParallelGC垃圾收集器
+% jinfo -flag UseParallelGC 86510
+-XX:+UseParallelGC
+```
+
+​	可以看到结果为-XX:+UseParallelGC，其中UseParallelGC前面的“+”表示已经使用，如果没有使用的话，用“-”表示。也可以查看某个参数的具体数值，比如查看新生代对象晋升到老年代对象的最大年龄，命令如下。
+
+```bash
+# 新生代对象晋升到老年代对象的最大年龄
+% jinfo -flag MaxTenuringThreshold 86510
+-XX:MaxTenuringThreshold=15
+```
+
+​	从结果可知新生代对象晋升到老年代对象的最大年龄是15。
+
+**5 jinfo用于修改JVM配置信息案例**
+
+1、开启或者关闭对应名称的参数(-flag [+-]name)（或者称为修改布尔类型的参数）。
+
+​	首先查看是否开启输出GC日志的参数，如果GC日志参数是开启状态，那么使用jinfo命令关闭；如果GC日志参数是关闭状态，那么使用jinfo命令开启，命令如下。
+
+```bash
+# 查看是否有设置输出GC日志
+% jinfo -flag PrintGC 86510
+-XX:-PrintGC
+# 设置开启打印GC日志
+% jinfo -flag +PrintGC 86510
+# 查看是否开启输出GC日志成功
+% jinfo -flag PrintGC 86510 
+-XX:+PrintGC
+# 设置关闭打印GC日志
+% jinfo -flag -PrintGC 86510
+# 查看是否关闭输出GC日志成功
+% jinfo -flag PrintGC 86510 
+-XX:-PrintGC
+```
+
+​	对于布尔类型的JVM参数，不仅可以使用-flag [+-]name的形式来进行值的改变，也可以使用-flag name=value的形式修改运行时的JVM参数。但是对value赋值必须是1或者0,1表示“+”，0表示“-”，如下所示。
+
+```bash
+# 设置开启打印GC日志
+% jinfo -flag PringGC=1 86510
+# 设置关闭打印GC日志
+% jinfo -flag PringGC=0 86510
+```
+
+2、修改对应名称的参数(-flag name=value)（或者称为修改非布尔类型的参数）
+
+​	修改非布尔类型MaxHeapFreeRatio的值，命令如下。
+
+```bash
+# 查看是否设置MaxHeapFreeRatio
+% jinfo -flag MaxHeapFreeRatio 86510
+-XX:MaxHeapFreeRatio=100
+# 修改MaxHeapFreeRatio值
+% jinfo -flag MaxHeapFreeRatio=80 86510
+# 查看修改结果
+% jinfo -flag MaxHeapFreeRatio 86510   
+-XX:MaxHeapFreeRatio=80
+```
+
+​	除了使用jinfo查看JVM配置参数之外，还有如下方式。
+
+```bash
+# 查看所有JVM中-XX类型参数启动初始值
+% java -XX:+PrintFlagsInitial
+# 查看所有JVM中-XX类型参数
+% java -XX:+PrintFlagsFinal -version
+# 查看已经被用户或者JVM设置过的详细的-XX类型参赛的名称和值
+% java -XX:+PrintCommandLineFlags -version
+```
+
+​	输出结果中包含五列。第一列表示参数的数据类型，第二列表示参数名称，第四列表示参数的值，第五列表示参数的类别。第三列“=”是参数的默认值，而“:=”表示参数被用户或者JVM赋值了。可以通过“java -XX:+PrintFlagsFinal | grep":="”命令查看哪些参数是被用户或者JVM赋值的。java -XX:+PrintFlagsInitial只展示了第三列为“=”的参数。
+
+​	java -XX:+PrintCommandLineFlags执行结果是java -XX:+PrintFlagsFinal的结果中带有“:=”的部分参数。可以通过该命令快捷地查看修改过的参数。
+
+## 21.5 jmap：导出内存映像文件和内存使用情况
+
+​	jmap(JVM Memory Map)用于生成JVM的内存转储快照，生成heapdump文件且可以查询finalize执行队列，以及Java堆与元空间的一些信息。jmap的作用并不仅仅是为了获取dump文件（堆转储快照文件，二进制文件），它还可以获取目标Java进程的内存相关信息，包括Java堆各区域的使用情况、堆中对象的统计信息、类加载信息等。
+
+​	开发人员可以在控制台中输入命令“jmap -help”，查阅jmap工具的具体使用方式和标准选项配置。
+
+​	jmap的基本使用语法如下。
+
+```bash
+% jmap -help
+Usage:
+    jmap -clstats <pid>
+        to connect to running process and print class loader statistics
+    jmap -finalizerinfo <pid>
+        to connect to running process and print information on objects awaiting finalization
+    jmap -histo[:live] <pid>
+        to connect to running process and print histogram of java object heap
+        if the "live" suboption is specified, only count live objects
+    jmap -dump:<dump-options> <pid>
+        to connect to running process and dump java heap
+    jmap -? -h --help
+        to print this help message
+
+    dump-options:
+      live         dump only live objects; if not specified,
+                   all objects in the heap are dumped.
+      format=b     binary format
+      file=<file>  dump heap to <file>
+
+    Example: jmap -dump:live,format=b,file=heap.bin <pid>
+```
+
+| 基本语法                                                 |
+| :------------------------------------------------------- |
+| jmap [option] <pid>                                      |
+| jmap [option] <executable <core>>                        |
+| jmap [option] [server_id@]<remote server ip or hostname> |
+
+**1 [ options ]选项说明**
+
+​	jmap工具[options]主要选项如下表所示。
+
+<div style="text-align:center;font-weight:bold;">jmap命令[options]选项说明</div>
+
+<img src="images/image-20241206100353107.png" alt="image-20241206100353107" style="zoom:50%;" />
+
+​	这些参数和Linux下输入显示的命令多少会有一些不同，也受JDK版本的影响。其中选项-dump、-heap、-histo是开发人员在工作中使用频率较高的指令。
+
+**2 使用案例**
+
+<span style="color:#1E90FF;font-weight:bold;">1、-dump选项：导出内存映像文件。</span>
+
+​	一般来说，使用jmap指令生成dump文件的操作算得上是最常用的jmap命令之一，将堆中所有存活对象导出至一个文件之中。执行该命令，JVM会将整个Java堆二进制格式转储到指定filename的文件中。live子选项是可选的，如果指定了live子选项，堆中只有存活的对象会被转储。
+
+​	通常在写dump文件前会触发一次Full GC，所以dump文件里保存的都是Full GC后留下的对象信息。由于生成dump文件比较耗时，因此大家需要耐心等待，尤其是大内存镜像生成dump文件需要耗费更长的时间来完成。
+
+​	如果想要浏览dump文件，读者可以使用jhat（Java堆分析工具）读取生成的文件，也可以使用本书第22章介绍的可视化工具进行解读，比如MAT内存分析工具。获取dump文件有手动获取和自动获取两种方式。
+
+​	手动获取的意思是当发现系统需要优化或者需要解决内存问题时，需要开发者主动执行jmap命令，导出dump文件，手动获取命令如下。
+
+```bash
+# 手动获取堆内存全部信息
+% jmap -dump:format=b,file=<filename.hprof><pid>
+# 手动获取堆内存存活对象全部信息
+% jmap -dump:live,format=b,file=<filename.hprof><pid>
+```
+
+​	如下代码所示，往堆内存中存放数据，然后导出dump文件。
+
+<span style="color:#40E0D0;">案例1：堆中存放对象案例</span>
+
+- 代码
+
+```java
+package com.coding.jvm07.cmd;
+
+import java.util.ArrayList;
+
+/**
+ * -Xms60m -Xmx60m -XX:SurvivorRatio=8
+ */
+public class GCTest {
+    public static void main(String[] args) {
+        ArrayList<byte[]> list = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            byte[] arr = new byte[1024 * 100]; // 100KB
+            list.add(arr);
+            try {
+                Thread.sleep(60);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+```
+
+​	运行程序，最终该程序会产生内存溢出，在执行过程中使用上述命令导出dump文件即可，运行结果如下所示。
+```bash
+% jmap -dump:format=b,file=$HOME/Misc/dump1.hprof 12991
+Heap dump file created
+```
+
+​	上述命令中，file表示指定文件目录，这里将文件放到$HOME（用户目录），12991表示Java进程ID，结果如下图所示，dump1.hprof就是导出的结果文件。
+
+<div style="text-align:center;font-weight:bold;">dump文件所在目录</div>
+
+<img src="images/image-20241206111402648.png" alt="image-20241206111402648" style="zoom:50%;" />
+
+​	当程序发生内存溢出退出系统时，一些瞬时信息都随着程序的终止而消失，而重现OOM问题往往比较困难或者耗时。若能在OOM时，自动导出dump文件就显得非常迫切。可以配置JVM参数“-XX:+HeapDumpOnOutOfMemoryError：”使程序发生OOM时，导出应用程序的当前堆快照。
+
+​	依然使用代码<span style="color:blue;font-weight:bold;">案例1：堆中存放对象案例</span>，在启动程序之前，在idea中添加如下JVM参数配置。
+
+```bash
+-Xms60m
+-Xmx60m
+-XX:SurvivorRatio=8
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/Users/wenqiu/Misc/autoDump.hprof
+```
+
+​	启动程序，运行结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">内存溢出运行结果</div>
+
+<img src="images/image-20241206112833885.png" alt="image-20241206112833885" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">dump文件所在目录</div>
+
+<img src="images/image-20241206112531056.png" alt="image-20241206112531056" style="zoom:50%;" />
+
+<span style="color:#1E90FF;font-weight:bold;">2、-heap选项：显示堆内存相关信息。</span>
+
+​	命令如下。
+
+```bash
+% jmap -heap <pid>
+```
+
+​	依然使用代码<span style="color:blue;font-weight:bold;">案例1：堆中存放对象案例</span>，执行命令运行结果如下：
+
+```bash
+% 
+```
 
 
 
@@ -11790,104 +12473,6 @@ DriverManager.getCallerClassLoader()
 
 
 
-
-# 三、字节码指令集与解析举例（<span style="color:red;font-weight:bold;">中篇</span>）
-
-## 4、字节码指令集与解析举例
-
-
-
-![image-20240927133540596](images/image-20240927133540596.png)
-
-#### 4.2.2、常量入栈指令
-
-
-
-<span style="color:blue;font-weight:bold;">示例：</span>
-
-```java
-    public void pushConstLdc() {
-        int i = -1;
-        int a = 5;
-        int b = 6;
-        int c = 127;
-        int d = 128;
-        int e = 1234567;
-    }
-```
-
-```
- 0 iconst_m1
- 1 istore_1
- 2 iconst_5
- 3 istore_2
- 4 bipush 6
- 6 istore_3
- 7 bipush 127
- 9 istore 4
-11 sipush 128
-14 istore 5
-16 ldc #7 <1234567>
-18 istore 6
-20 return
-```
-
-```java
- 	public void constLdc() {
-        long a1 = 1;
-        long a2 = 2;
-        float b1 = 2;
-        float b2 = 3;
-        double c1 = 1;
-    }
-```
-
-```
- 0 lconst_1
- 1 lstore_1
- 2 ldc2_w #8 <2>
- 5 lstore_3
- 6 fconst_2
- 7 fstore 5
- 9 ldc #10 <3.0>
-11 fstore 6
-13 dconst_1
-14 dstore 7
-16 return
-```
-
-#### 4.2.3、出栈装入局部变量表指令
-
-出栈装入局部变量表指令用于<span style="color:red;font-weight:bold;">将操作数栈中栈顶元素弹出后，装入局部变量表的指定位置</span>，用于给局部变量表赋值。
-
-这类指令主要以store的形式存在，比如xstore（x为i、l、f、d、a）、xstore_n（想为i、l、f、d、a）、xstore_n（x为i、l、f、d、a，n为0至3）。
-
-- 其中，指令istore_n将从操作数栈中弹出一个整数，并把它赋值给局部变量索引n位置。
-- 指令xstore由于没有隐含参数信息，故需要提供一个byte类型的参数指定目标局部变量表的位置。
-
-<span style="color:blue;font-weight:bold;">说明：</span>
-
-<span style="color:red;font-weight:bold;">一般来说，类似像store这样的命令需要带一个参数，用来指明将弹出的元素放在局部变量表的第几个位置</span>。但是，为了尽可能压缩指令大小，使用专门的istore_1指令标识将弹出的元素放置在局部变量表第1个位置。类似的还有istore_0、istore2、istore3，它们分别表示从操作数栈顶弹出一个元素，存放在局部变量表第0、2、3个位置。
-
-由于局部变量表前几个位置总是非常常用，因此<span style="color:red;font-weight:bold;">这种做法虽然增加了指令数量，但是可以大大压缩生成的字节码的体积</span>。如果局部变量表很大，需要存储的槽位大于3，那么可以使用istore指令，外加一个参数，用来表示需要存放的槽位位置。
-
-<span style="color:blue;font-weight:bold;">示例：</span>
-
-```java
-    public void store(int k, double d) {
-        int m = k + 2;
-        long l = 12;
-        String str = "atguigu";
-        float f = 10.0F;
-        d = 10;
-    }
-```
-
-![image-20240929132512849](images/image-20240929132512849.png)
-
-
-
-# 四、类的加载过程（类的生命周期）详解（<span style="color:red;font-weight:bold;">中篇</span>）
 
 
 
