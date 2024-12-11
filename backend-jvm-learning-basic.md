@@ -9521,6 +9521,8 @@ public class SynchronizedTest {
 
 ​	我们知道class文件是存放在磁盘上的，如果想要在JVM中使用class文件，需要将其加载至内存当中。前面我们已经讲解了class文件的结构，本章将详细介绍class文件加载到内存中的过程。
 
+![image-20230415194104058](images/image-20230415194104058.png)
+
 ## 19.1 概述
 
 ​	在Java中数据类型分为基本数据类型和引用数据类型。基本数据类型由JVM预先定义，可以直接被用户使用，引用数据类型则需要执行类的加载才可以被用户使用。Java虚拟机规范中规定，class文件加载到内存，再到类卸载出内存会经历7个阶段，分别是加载、验证、准备、解析、初始化、使用和卸载，其中，验证、准备和解析3个阶段统称为链接(Linking)，整个过程称为类的生命周期，如下图所示。
@@ -12286,79 +12288,2022 @@ Heap dump file created
 ​	依然使用代码<span style="color:blue;font-weight:bold;">案例1：堆中存放对象案例</span>，执行命令运行结果如下：
 
 ```bash
-% 
+# 由于SIP开启，无法执行成功
+% csrutil status
+System Integrity Protection status: enabled.
+% jmap -heap 12991
+Attaching to process ID 12991, please wait...
+ERROR: attach: task_for_pid(12991) failed: '(os/kern) failure' (5)
+Error attaching to process: sun.jvm.hotspot.debugger.DebuggerException: Can't attach to the process. Could be caused by an incorrect pid or lack of privileges.
+sun.jvm.hotspot.debugger.DebuggerException: sun.jvm.hotspot.debugger.DebuggerException: Can't attach to the process. Could be caused by an incorrect pid or lack of privileges.
 ```
 
+<img src="images/image-20241206132112799.png" alt="image-20241206132112799" style="zoom:50%;" />
 
+​	打印heap的概要信息、GC使用的算法、heap的配置和使用情况，可以判断当前堆内存使用情况以及垃圾回收情况。
+
+​	可以看到最大堆大小为60MB，和前面的VM配置信息一致；新生代大小等于Eden区加From区加To的大小，总共为20MB，符合新生代和老年代比例大小为2:1；老年代大小为40MB，老年代使用率达到了99.53%，说明老年代空间是不足的。
+
+<span style="color:#1E90FF;font-weight:bold;">3、-hiso选项：显示堆中对象的统计信息</span>
+
+​	命令如下。
+
+```bash
+% jmap -histo 38053
+
+ num     #instances         #bytes  class name
+----------------------------------------------
+   1:          3622      118247168  [I
+   2:          7029        5513136  [B
+   3:         25594        2099600  [C
+   4:         17710         425040  java.lang.String
+   5:          6855         306024  [Ljava.lang.Object;
+   6:          1841         209368  java.lang.Class
+   7:          2958         165648  jdk.internal.org.objectweb.asm.Item
+   8:          1302         114576  java.lang.reflect.Method
+   9:          3031          96992  java.util.HashMap$Node
+  10:           162          94560  [Ljdk.internal.org.objectweb.asm.Item;
+  11:          3829          93936  [Ljava.lang.Class;
+```
+
+​	运行结果如下，由于篇幅原因，展示部分结果。
+
+​	上面结果中，instances表示当前的实例数量；bytes表示对象占用的内存大小；classs name表示类名，按照内存大小逆序排列。
+
+<span style="color:#1E90FF;font-weight:bold;">4、-permstat选项</span>
+
+​	该选项主要以ClassLoader为口径输出永久代的内存状态信息，仅对Linux和solaris平台有效。
+
+<span style="color:#1E90FF;font-weight:bold;">5、-finalizerinfo选项</span>
+
+​	该选项主要用来显示F-Queue中等待Finalize线程执行finalize方法的对象，就是说查看堆积在finalizer队列中的对象。仅对Linux和solaris平台有效。
+
+<span style="color:#1E90FF;font-weight:bold;">6、-F选项。</span>
+
+​	该选项用于当JVM进程对-dump选项没有任何响应时，可使用此选项强制执行生成dump文件。仅对Linux和solaris平台有效。
+
+​	由于jmap将访问堆中的所有对象，为了保证在此过程中不被应用线程干扰，jmap需要借助安全点机制，让所有线程不改变堆中数据的状态。也就是说，由jmap导出的堆快照必定是安全点位置的。这可能导致基于该快照的分析结果存在偏差。例如，<span style="color:#FF00FF;font-weight:bold;">假设在编译生成的机器码中，某些对象的生命周期在两个安全点之间，那么：live选项将无法探知到这些对象。另外如果某个线程长时间无法跑到安全点，jmap将一直等待下去。与前面讲的jstat不同，垃圾收集器会主动将jstat所需要的摘要数据保存至固定位置中，而jstat只需要直接读取即可</span>。
+
+## 21.6 jhat:JDK自带堆分析工具
+
+​	jhat(JVM Heap Analysis Tool)命令一般与jmap命令搭配使用，用于分析jmap生成的dump文件（堆转储快照）。jhat内置了一个微型的HTTP/HTML服务器，生成dump文件的分析结果后，用户可以在浏览器中查看分析结果。
+
+​	使用了jhat命令，就启动了一个http服务，端口是7000，即通过访问http://localhost:7000/就可以在浏览器中查看结果。jhat命令在JDK9中已经被删除，官方建议用VisualVM代替。实际工作中一般不会直接在生产服务器使用jhat分析dump文件。
+
+​	jhat的基本使用语法如下。
+
+```bash
+% jhat [options] [hostid]
+```
+
+**1 [ options ]选项说明**
+
+​	jhat工具[options]主要选项如下表所示。
+
+<div style="text-align:center;font-weight:bold;">jps命令[options]选项说明</div>
+
+<img src="images/image-20241206173516636.png" alt="image-20241206173516636" style="zoom:50%;" />
+
+​	下面使用jhat命令分析jmap导出的dump文件，命令如下。
+
+```bash
+% jhat /Users/wenqiu/Misc/autoDump.hprof
+```
+
+​	运行结果如下所示。
+
+```bash
+% jhat /Users/wenqiu/Misc/autoDump.hprof
+Reading from /Users/wenqiu/Misc/autoDump.hprof...
+Dump file created Fri Dec 06 11:24:16 CST 2024
+Snapshot read, resolving...
+Resolving 32384 objects...
+Chasing references, expect 6 dots......
+Eliminating duplicate references......
+Snapshot resolved.
+Started HTTP server on port 7000
+Server is ready.
+```
+
+​	当界面出现Server is ready时，就可以在浏览器访问 http://localhost:7000/ 了，如下图所示。
+
+![image-20241207075818138](images/image-20241207075818138.png)
+
+​	分析结果默认以包的形式分组展示，当分析内存溢出或者内存泄漏问题的时候一般会用到“Show heap histogram”功能，它的作用和jmap –histo一样，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">Heap Histogram</div>
+
+![image-20241207080114785](images/image-20241207080114785.png)
+
+​	在这里可以找到内存中使用空间最大的对象。通常导出的堆快照信息非常大，可能很难通过页面上简单的链接索引找到想要的信息。为此，jhat还支持使用OQL(Object Query Language)语句对堆快照进行查询。执行OQL语言的界面非常简洁。单击“Execute Object Query Language(OQL)query”即可进入OQL查询页面，它是一种类似SQL的语法，可以对内存中的对象进行查询统计，例如代码清单21-4，查询了内存中长度大于500的字符串。
+
+<span style="color:#40E0D0;">案例1：通过OQL语句查询</span>
+-  代码
+
+```sql
+select s from java.lang.String s where s.value.length > 500
+```
+
+​	结果如下图所示。
+
+​	平常使用jhat命令的频率并不高，所以此处也不再过多赘述，各位读者将此作为了解内容即可。
+
+<div style="text-align:center;font-weight:bold;">OQL查询结果集</div>
+
+![image-20241207091528255](images/image-20241207091528255.png)
+
+## 21.7 jstack：打印JVM中线程快照
+
+​	jstack(JVM Stack Trace)用于生成JVM指定进程当前时刻的线程快照(Thread Dump)，方便用户跟踪JVM堆栈信息。线程快照就是当前JVM内指定进程的每一条线程正在执行的方法堆栈的集合。
+
+​	生成线程快照的作用是可用于定位线程出现长时间停顿的原因，如线程间死锁、死循环、请求外部资源导致的长时间等待等问题，这些都是导致线程长时间停顿的常见原因。当线程出现停顿时，就可以用jstack显示各个线程调用的堆栈情况。
+
+​	在线程快照中，有下面几种状态，如下表所示。
+
+<div style="text-align:center;font-weight:bold;">线程状态</div>
+
+<img src="images/image-20241207202718114.png" alt="image-20241207202718114" style="zoom:50%;" />
+
+​	其中线程的Deadlock、Waiting on condition、Waiting on monitor entry以及Blocked状态需要在分析线程栈的时候重点关注。
+
+​	jstack的基本使用语法如下。
+
+```bash
+% jstack -help
+Usage:
+    jstack [-l] <pid>
+        (to connect to running process)
+    jstack -F [-m] [-l] <pid>
+        (to connect to a hung process)
+    jstack [-m] [-l] <executable> <core>
+        (to connect to a core file)
+    jstack [-m] [-l] [server_id@]<remote server IP or hostname>
+        (to connect to a remote debug server)
+
+Options:
+    -F  to force a thread dump. Use when jstack <pid> does not respond (process is hung)
+    -m  to print both java and native frames (mixed mode)
+    -l  long listing. Prints additional information about locks
+    -h or -help to print this help message
+```
+
+| 基本语法                |
+| ----------------------- |
+| jstack [ option ] <pid> |
+
+**1 [ options ]选项说明**
+
+​	jstack工具[options]主要选项如下表所示。
+
+<div style="text-align:center;font-weight:bold;">jps命令[options]选项说明</div>
+
+![image-20241207203355363](images/image-20241207203355363.png)
+
+**2 使用案例**
+
+​	如下代码演示了线程死锁，使用jstack命令观察线程状态。
+
+<span style="color:#40E0D0;">案例1：死锁案例</span>
+
+- 代码
+
+```java
+package com.coding.jvm07.cmd;
+
+/**
+ * 演示线程的死锁问题
+ * 互相的 BLOCKED 导致-> Found one Java-level deadlock:
+ */
+public class ThreadDeadLock {
+    public static void main(String[] args) {
+        StringBuilder sb1 = new StringBuilder();
+        StringBuilder sb2 = new StringBuilder();
+
+        new Thread(() -> {
+            synchronized (sb1) {
+                sb1.append("a");
+                sb2.append("1");
+
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                synchronized (sb2) {
+                    sb1.append("b");
+                    sb2.append("2");
+
+                    System.out.println("sb1 = " + sb1);
+                    System.out.println("sb2 = " + sb2);
+                }
+            }
+        }).start();
+
+        new Thread(() -> {
+            synchronized (sb2) {
+                sb1.append("c");
+                sb2.append("3");
+
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                synchronized (sb1) {
+                    sb1.append("d");
+                    sb2.append("4");
+
+                    System.out.println("sb1 = " + sb1);
+                    System.out.println("sb2 = " + sb2);
+                }
+            }
+        }).start();
+
+    }
+}
+
+```
+
+​	上面例子很简单，启动了两个线程，分别获取对方的资源，如此造成死锁。下面启动程序，使用jstack命令查看线程状态，命令如下，其中1776是程序的进程ID。
+
+```bash
+% jstack 26627
+```
+
+​	运行结果如下。
+
+<div style="text-align:center;font-weight:bold;">获取所有线程的状态</div>
+
+<img src="images/image-20241207204609066.png" alt="image-20241207204609066" style="zoom:50%;" />
+
+​	从上面结果中可以发现，Thread-1线程和Thread-0线程互相等待对方的资源，问题代码出现“com.coding.jvm07.cmd.ThreadDeadLock.lambda$main$1”行。在死锁情况出现时，可以很方便地帮助定位到问题。也可以通过Thread.getAllStackTraces()方法获取所有线程的状态，如下代码所示。
+
+<span style="color:#40E0D0;">案例2：获取所有线程的状态</span>
+
+- 代码
+
+```bash
+package com.coding.jvm07.cmd;
+
+import java.util.Map;
+import java.util.Set;
+
+public class AllStackTrace {
+    public static void main(String[] args) {
+        Map<Thread, StackTraceElement[]> all = Thread.getAllStackTraces();
+        Set<Map.Entry<Thread, StackTraceElement[]>> entries = all.entrySet();
+        for (Map.Entry<Thread, StackTraceElement[]> entry : entries) {
+            Thread t = entry.getKey();
+            StackTraceElement[] value = entry.getValue();
+            System.out.println("【Thread name is :" + t.getName() + "】");
+            for (StackTraceElement stackTraceElement : value) {
+                System.out.println("\t" + stackTraceElement.toString());
+            }
+        }
+    }
+}
+
+```
+
+​	运行结果如图21-26所示，可以看到各个线程的状态。
+
+<div style="text-align:center;font-weight:bold;">获取所有线程状态</div>
+
+```bash
+【Thread name is :Signal Dispatcher】
+【Thread name is :Reference Handler】
+	java.lang.Object.wait(Native Method)
+	java.lang.Object.wait(Object.java:502)
+	java.lang.ref.Reference.tryHandlePending(Reference.java:191)
+	java.lang.ref.Reference$ReferenceHandler.run(Reference.java:153)
+【Thread name is :main】
+	java.lang.Thread.dumpThreads(Native Method)
+	java.lang.Thread.getAllStackTraces(Thread.java:1615)
+	com.coding.jvm07.cmd.AllStackTrace.main(AllStackTrace.java:8)
+【Thread name is :Monitor Ctrl-Break】
+	java.util.Collections.unmodifiableSet(Collections.java:1120)
+	jdk.net.ExtendedSocketOptions.options(ExtendedSocketOptions.java:154)
+	jdk.net.ExtendedSocketOptions.<clinit>(ExtendedSocketOptions.java:142)
+	java.lang.Class.forName0(Native Method)
+	java.lang.Class.forName(Class.java:264)
+	sun.net.ExtendedSocketOptions.<clinit>(ExtendedSocketOptions.java:157)
+	java.net.AbstractPlainSocketImpl.<clinit>(AbstractPlainSocketImpl.java:348)
+	java.net.Socket.setImpl(Socket.java:520)
+	java.net.Socket.<init>(Socket.java:441)
+	java.net.Socket.<init>(Socket.java:228)
+	com.intellij.rt.execution.application.AppMainV2$1.run(AppMainV2.java:52)
+【Thread name is :Finalizer】
+	java.lang.Object.wait(Native Method)
+	java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:150)
+	java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:171)
+	java.lang.ref.Finalizer$FinalizerThread.run(Finalizer.java:188)
+```
+
+## 21.8 jcmd：多功能命令行
+
+​	在JDK1.7以后，新增了一个命令行工具jcmd。它是一个多功能的工具，可以用来实现前面除了jstat之外所有命令的功能，比如用它来导出堆、内存使用、查看Java进程、导出线程信息、执行GC、JVM运行时间等。jcmd拥有jmap的大部分功能，并且官方也推荐使用jcmd命令代替jmap命令。
+
+​	至于jstat的功能，虽然jcmd复制了jstat的部分代码，并支持通过PerfCounter.print子命令来打印所有的Performance Counter，但是它没有保留jstat的输出格式，也没有重复打印的功能。
+
+​	jcmd的基本使用语法如下表所示。
+
+<div style="text-align:center;font-weight:bold;">jcmd命令使用语法</div>
+
+<img src="images/image-20241207213026808.png" alt="image-20241207213026808" style="zoom:50%;" />
+
+​	命令jcmd可以针对给定的JVM进程执行一条命令。首先来看一下使用jcmd列出当前系统中的所有Java进程，命令如下所示。
+
+```bash
+% jcmd -l
+```
+
+​	运行结果如下图所示。可以看到当前有5个Java进程，其中包含命令自身。
+
+<div style="text-align:center;font-weight:bold;">jcmd命令查看进程ID</div>
+
+```bash
+% jcmd -l
+1732 com.intellij.idea.Main
+853 
+28821 sun.tools.jcmd.JCmd -l
+28599 org.jetbrains.jps.cmdline.Launcher /Applications/IntelliJ IDEA.app/Contents/plugins/java/lib/jps-builders.jar:/Applications/IntelliJ IDEA.app/Contents/plugins/java/lib/jps-builders-6.jar:/Applications/IntelliJ IDEA.app/Contents/plugins/java/lib/jps-javac-extension.jar:/Applications/IntelliJ IDEA.app/Contents/lib/util-8.jar:/Applications/IntelliJ IDEA.app/Contents/lib/util_rt.jar:/Applications/IntelliJ IDEA.app/Contents/lib/platform-loader.jar:/Applications/IntelliJ IDEA.app/Contents/lib/annotations.jar:/Applications/IntelliJ IDEA.app/Contents/lib/trove.jar:/Applications/IntelliJ IDEA.app/Contents/plugins/java/lib/jetbrains.kotlinx.metadata.jvm.jar:/Applications/IntelliJ IDEA.app/Contents/plugins/java/lib/netty-codec-protobuf.jar:/Applications/IntelliJ IDEA.app/Contents/lib/protobuf.jar:/Applications/IntelliJ IDEA.app/Contents/lib/jps-model.jar:/Applications/IntelliJ IDEA.app/Contents/plugins/java/lib/javac2.jar:/Applications/IntelliJ IDEA.app/Contents/lib/forms_rt.jar:/Applications/IntelliJ IDEA.app/Contents/
+28600 com.coding.jvm07.cmd.ScannerTest
+```
+
+1、jcmd pid help选项：针对指定的进程，列出支持的所有命令。
+
+```bash
+% jcmd 28600 help
+```
+
+​	运行结果如下。
+
+```bash
+% jcmd 28600 help
+28600:
+The following commands are available:
+JFR.stop
+JFR.start
+JFR.dump
+JFR.check
+VM.native_memory
+VM.check_commercial_features
+VM.unlock_commercial_features
+ManagementAgent.stop
+ManagementAgent.start_local
+ManagementAgent.start
+VM.classloader_stats
+GC.rotate_log
+Thread.print
+JVMTI.data_dump
+VM.class_hierarchy
+GC.class_stats
+GC.class_histogram
+GC.heap_dump
+GC.finalizer_info
+GC.heap_info
+GC.run_finalization
+GC.run
+VM.info
+VM.uptime
+VM.dynlibs
+VM.set_flag
+VM.flags
+VM.system_properties
+VM.command_line
+VM.version
+help
+
+For more information about a specific command use 'help <command>'.
+```
+
+​	上面罗列的是进程号为28600的JVM进程支持的jcmd相关命令操作，jcmd pid [options]中的options就是上面列出的所有命令参数选项。下面介绍常用的几个参数选项。
+
+2、查看JVM启动时间VM.uptime。
+
+```bash
+% jcmd 28600 VM.uptime
+```
+
+​	运行结果如下所示，当前JVM进程已经运行了387.199秒。
+
+```bash
+% jcmd 28600 VM.uptime 
+28600:
+387.199 s
+```
+
+3、打印线程栈信息。
+
+```bash
+% jcmd 28600 Thread.print
+```
+
+​	运行结果如下所示。
+
+```bash
+% jcmd 28600 Thread.print
+28600:
+2024-12-07 22:36:31
+Full thread dump Java HotSpot(TM) 64-Bit Server VM (25.421-b09 mixed mode):
+
+"JMX server connection timeout 24" #24 daemon prio=9 os_prio=31 tid=0x000000011708b000 nid=0x6b03 in Object.wait() [0x000000017457e000]
+   java.lang.Thread.State: TIMED_WAITING (on object monitor)
+	at java.lang.Object.wait(Native Method)
+	at com.sun.jmx.remote.internal.ServerCommunicatorAdmin$Timeout.run(ServerCommunicatorAdmin.java:168)
+	- locked <0x0000000805fc33a8> (a [I)
+	at java.lang.Thread.run(Thread.java:750)
+
+"RMI Scheduler(0)" #23 daemon prio=9 os_prio=31 tid=0x0000000117067000 nid=0x6903 waiting on condition [0x0000000174372000]
+   java.lang.Thread.State: TIMED_WAITING (parking)
+	at sun.misc.Unsafe.park(Native Method)
+......省略......
+```
+
+4、查看系统中类的统计信息
+
+```bash
+% jcmd 28600 GC.class_histogram
+```
+
+​	运行结果如下所示，篇幅原因，只展示部分结果。
+
+```bash
+% jcmd 28600 GC.class_histogram
+28600:
+
+ num     #instances         #bytes  class name
+----------------------------------------------
+   1:          9326         596832  [C
+   2:          9300         223200  java.lang.String
+   3:          1834         208576  java.lang.Class
+   4:           487         190504  [B
+   5:          1148         101024  java.lang.reflect.Method
+   6:          1796          97552  [Ljava.lang.Object;
+   7:          1532          49024  java.util.HashMap$Node
+   8:           774          44312  [I
+   9:           583          41976  java.lang.reflect.Field
+  10:          1160          37120  java.util.concurrent.ConcurrentHashMap$Node
+  11:          1349          31760  [Ljava.lang.Class;
+  12:           897          28848  [Ljava.lang.String;
+  ......省略......
+```
+
+5、导出堆信息。
+
+```bash
+% jcmd 28600 GC.heap_dump /Users/wenqiu/Misc/jcmd.hprof
+```
+
+​	运行结果如图21-31所示，可以直接存储堆文件。
+
+```bash
+% jcmd 28600 GC.heap_dump /Users/wenqiu/Misc/jcmd.hprof
+28600:
+Heap dump file created
+```
+
+6、获得系统的Properties内容。
+
+```bash
+% jcmd 28600 VM.system_properties
+```
+
+​	运行结果如下所示，篇幅原因，只展示部分结果。
+
+```bash
+% jcmd 28600 VM.system_properties
+28600:
+#Sat Dec 07 22:47:06 CST 2024
+java.runtime.name=Java(TM) SE Runtime Environment
+sun.boot.library.path=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home/jre/lib
+java.vm.version=25.421-b09
+gopherProxySet=false
+java.vm.vendor=Oracle Corporation
+java.vendor.url=http\://java.oracle.com/
+path.separator=\:
+java.rmi.server.randomIDs=true
+java.vm.name=Java HotSpot(TM) 64-Bit Server VM
+file.encoding.pkg=sun.io
+user.country=CN
+sun.java.launcher=SUN_STANDARD
+......省略......
+```
+
+7、获得启动参数。
+
+```bash
+% jcmd 28600 VM.flags
+```
+
+​	运行结果如下图所示。
+
+```bash
+% jcmd 28600 VM.flags
+28600:
+-XX:CICompilerCount=12 -XX:InitialHeapSize=2147483648 -XX:MaxHeapSize=32203866112 -XX:MaxNewSize=10734272512 -XX:MinHeapDeltaBytes=524288 -XX:NewSize=715653120 -XX:OldSize=1431830528 -XX:+UseCompressedClassPointers -XX:+UseCompressedOops -XX:+UseParallelGC 
+```
+
+## 21.9 jstatd：远程主机信息收集
+
+​	之前的指令只涉及监控本机的Java应用程序，而在这些工具中，一些监控工具也支持对远程计算机的监控（如jps、jstat）。为了启用远程监控，则需要配合使用jstatd工具。
+
+​	命令jstatd是一个RMI服务端程序，它的作用相当于代理服务器，建立本地计算机与远程监控工具的通信。jstatd服务器将本机的Java应用程序信息传递到远程计算机。执行原理如下图所示。
+
+<div style="text-align:center;font-weight:bold;">jstatd执行原理图</div>
+
+<img src="images/image-20241207225315269.png" alt="image-20241207225315269" style="zoom:50%;" />
+
+​	直接打开jstatd服务器可能会抛出访问拒绝异常，这是因为jstatd程序没有足够的权限，如图21-35所示。jstatd内容各位读者了解即可。
+
+```bash
+% jstatd
+Could not create remote object
+access denied ("java.util.PropertyPermission" "java.rmi.server.ignoreSubClasses" "write")
+java.security.AccessControlException: access denied ("java.util.PropertyPermission" "java.rmi.server.ignoreSubClasses" "write")
+	at java.security.AccessControlContext.checkPermission(AccessControlContext.java:472)
+	at java.security.AccessController.checkPermission(AccessController.java:886)
+	at java.lang.SecurityManager.checkPermission(SecurityManager.java:549)
+	at java.lang.System.setProperty(System.java:806)
+	at sun.tools.jstatd.Jstatd.main(Jstatd.java:139)
+```
 
 # 第22章 JVM监控及诊断工具
+
+​	生产环境中，一旦出现内存泄漏，长期运行下非常容易引发内存溢出(Out Of Memory,OOM)故障。如果没有一个好的工具提供给开发人员定位问题和分析问题，那么这将会是一场噩梦。第21章讲解的命令行工具或命令行工具的组合使用或许能帮助获取目标Java应用性能相关的基础信息，但它们也有局限性，比如展示结果不够直观。本章将会介绍界面化的软件帮助我们诊断JVM相关问题。
+
+## 22.1 概述
+
+​	在工作中，通过命令行工具定位应用的性能问题，存在下列局限。
+
+1、无法获取方法级别的分析数据，如方法间的调用关系、各方法的调用次数和调用时间等（这对定位应用性能瓶颈至关重要）。
+
+2、要求用户登录到目标Java应用所在的宿主机上，使用起来不是很方便。
+
+3、分析数据通过终端输出，结果展示不够直观。
+
+​	基于上面的原因，JDK提供了一些内存泄漏的分析工具，如jconsole、jvisualvm等，用于辅助开发人员定位问题，但是这些工具很多时候并不足以满足快速定位问题的需求。所以本章作者将会介绍更多的实用性工具。我们把这些工具大致分为两种，一种是JDK自带的工具，另一种是第三方工具。
+
+​	JDK自带的工具包含下面3种类型。
+
+1、jconsole:JDK自带的可视化监控工具，位于JDK的bin目录下。用于查看Java应用程序的运行概况、监控堆信息、永久区（或元空间）使用情况、类加载情况等。
+
+2、VisualVM:JDK自带的可视化监视工具，位于JDK的bin目录下。它提供了一个可视界面，用于查看JVM上运行的基于Java技术的应用程序的详细信息。
+
+3、JMC:Java Mission Control，内置Java Flight Recorder。能够以极低的性能开销收集JVM的性能数据。
+
+​	第三方工具包含下面4种类型。
+
+1、MAT(Memory Analyzer Tool)：基于Eclipse的内存分析工具，是一个快速、功能丰富的Java heap分析工具，它可以帮助我们查找内存泄漏和减少内存消耗。
+
+2、JProfiler：商业软件，需要付费使用，功能非常强大。
+
+3、Arthas:Alibaba开源的Java诊断工具，深受开发者喜爱。
+
+4、Btrace:Java运行时追踪工具。可以在不停机的情况下，跟踪指定的方法调用、构造函数调用和系统内存等信息。
+
+## 22.2 jconsole
+
+​	从Java5开始，jconsole就是JDK中自带的Java监控和管理控制台，主要用于对JVM中内存、线程和类等信息的监控，是一个基于JMX(Java Management Extensions)的GUI性能监控工具。jconsole使用JVM的扩展机制获取并展示JVM中运行的应用程序的性能和资源消耗等信息。
+
+​	jconsole可以通过三种方式连接正在运行的JVM，分别是Local、Remote和Advanced。
+
+​	1、Local：使用jconsole连接一个正在本地系统运行的JVM，并且执行程序的用户和运行jconsole的用户必须是同一个系统用户。jconsole使用文件系统的授权通过RMI连接器连接到平台的MBean服务器上。
+
+​	2、Remote：使用下面的URL通过RMI连接器连接到一个JMX代理，service:jmx:rmi:///jndi/rmi://hostName:portNum/jmxrmio hostName填入主机名称，portNum为JMX代理启动时指定的端口。jconsole为建立连接，需要在环境变量中设置mx.remote.credentials来指定用户名和密码，从而进行授权。
+
+​	3、Advanced：使用一个特殊的URL连接JMX代理。一般情况使用自己定制的连接器而不是RMI提供的连接器来连接JMX代理。
+
+​	jconsole工具安装在JDK的bin目录下，启动jconsole后，将自动搜索本机运行的JVM进程，不需要jps命令来查询指定。双击其中一个JVM进程即可开始监控，也可使用“远程进程”来连接远程服务器，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">jconsole启动界面</div>
+
+<img src="images/image-20241208185559682.png" alt="image-20241208185559682" style="zoom: 50%;" />
+
+​	设置JVM参数如下，运行如下代码，然后使用jconsole进行监控。
+
+<span style="color:#40E0D0;">案例1：jconsole示例代码</span>
+
+- 代码
+
+```java
+package com.coding.jvm07.vmoptions;
+
+import java.util.ArrayList;
+import java.util.Random;
+
+/**
+ * -Xms600m -Xmx600m -XX:SurvivorRatio=8
+ */
+public class HeapInstanceTest {
+    byte[] buffer = new byte[new Random().nextInt(1024 * 100)];
+
+    public static void main(String[] args) {
+        try {
+            Thread.sleep(10000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        ArrayList<HeapInstanceTest> list = new ArrayList<>();
+        while (true) {
+            list.add(new HeapInstanceTest());
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+```
+
+​	选择如上代码的程序进程进入jconsole主界面，有“概览” “内存” “线程” “类” “VM概要” 和 “MBean” 六个选项卡，如下图所示。其中“概览”选项卡显示了关于堆内存使用量、线程、类、JVM进程的CPU占用率的关键监视信息。
+
+<div style="text-align:center;font-weight:bold;">jconsole主界面</div>
+
+<img src="images/image-20241208190830894.png" alt="image-20241208190830894" style="zoom:50%;" />
+
+​	“内存”选项卡相当于jstat命令，用于监视收集器管理的JVM内存（Java堆和非堆）变化趋势，还可在“详细信息”选项观察GC执行的时间及次数，如下图所示。
+
+​	“已用”代表当前使用的内存总量。使用的内存总量是指所有的对象占用的内存，包括可达和不可达的对象。
+
+​	“已提交”内存数量会随时间变化而变化。JVM可能将某些内存释放，还给操作系统，所以已提交内存可能比启动时初始分配的内存量要少，但是已提交内存总是大于或等于已使用内存。
+
+​	“最大值”代表内存管理可用的最大内存数量。此值可能改变或者为未定义，如果JVM试图增加使用内存容量超出了提交内存，那么即使使用内存小于或等于最大内存（比如系统虚拟内存较低），内存分配仍可能失败。
+
+<div style="text-align:center;font-weight:bold;">内存选项卡</div>
+
+<img src="images/image-20241208191619007.png" alt="image-20241208191619007" style="zoom:50%;" />
+
+​	“线程”选项卡中活动线程代表当前活动的守护线程和非守护线程数量。峰值代表自JVM启动后，活动线程最高数量。该选项卡可以监控发生死锁的线程，在页面最下面有“检测死锁选项”。代码清单22-2演示了程序发生死锁的情况，使用jconsole检测如图22-4和图22-5所示。
+
+<span style="color:#40E0D0;">案例2：死锁案例</span>
+
+- 代码
+
+```java
+package com.coding.jvm07.cmd;
+
+/**
+ * 演示线程的死锁问题
+ * 互相的 BLOCKED 导致-> Found one Java-level deadlock:
+ */
+public class ThreadDeadLock {
+    public static void main(String[] args) {
+        StringBuilder sb1 = new StringBuilder();
+        StringBuilder sb2 = new StringBuilder();
+
+        new Thread(() -> {
+            synchronized (sb1) {
+                sb1.append("a");
+                sb2.append("1");
+
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                synchronized (sb2) {
+                    sb1.append("b");
+                    sb2.append("2");
+
+                    System.out.println("sb1 = " + sb1);
+                    System.out.println("sb2 = " + sb2);
+                }
+            }
+        }).start();
+
+        new Thread(() -> {
+            synchronized (sb2) {
+                sb1.append("c");
+                sb2.append("3");
+
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                synchronized (sb1) {
+                    sb1.append("d");
+                    sb2.append("4");
+
+                    System.out.println("sb1 = " + sb1);
+                    System.out.println("sb2 = " + sb2);
+                }
+            }
+        }).start();
+
+    }
+}
+
+```
+
+<div style="text-align:center;font-weight:bold;">“线程”选项卡</div>
+
+<img src="images/image-20241208192417020.png" alt="image-20241208192417020" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">线程死锁检测</div>
+
+<img src="images/image-20241208192529723.png" alt="image-20241208192529723" style="zoom:50%;" />
+
+​	从上图可知线程Thread-1在等待一个被线程Thread-0持有StringBuilder对象，单击线程Thread-0则显示它也在等待一个Integer对象，被线程Thread-1持有，这样两个线程就互相卡住，都不存在等到锁释放的希望了，导致死锁。
+
+​	VM概要”选项卡可清楚地显示指定的JVM参数及堆信息，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VM概要”选项卡</div>
+
+<img src="images/image-20241208193225581.png" alt="image-20241208193225581" style="zoom:50%;" />
+
+## 22.3 VisualVM
+
+​	VisualVM是一个功能强大的故障诊断和性能监控的可视化工具。它集成了多个JDK命令行工具，使用VisualVM可用于显示JVM进程及进程的配置和环境信息（功能类似jps和jinfo命令），监视应用程序的CPU、GC、堆、方法区和线程的信息（功能类似jstat和jstack命令）等，甚至代替jconsole。在JDK6 Update 7以后，VisualVM便作为JDK的一部分发布（VisualVM在JDK/bin目录下，称为jvisualvm），这也意味着它完全免费。除了作为JDK的一部分发布以外，VisualVM也可以作为独立的软件安装，官网主页如下图所示。
+
+​	VisualVM官网：https://visualvm.github.io/index.html
+
+<div style="text-align:center;font-weight:bold;">VisualVM官网主页</div>
+
+<img src="images/image-20241208194451908.png" alt="image-20241208194451908" style="zoom:50%;" />
+
+### 22.3.1 插件安装
+
+​	VisualVM的一大特点是支持插件扩展，并且插件安装非常方便。在安装插件之前，需要先启动VisualVM，启动VisualVM有两种方式。VisualVM工具在JDK/bin目录下，双击jvisualvm.exe即可启动VisualVM。也可以直接从IntelliJ IDEA开发工具启动VisualVM监控工具。IntelliJ IDEA开发工具中安装VisualVM步骤如下。
+
+1、点击“File”→“Settings”→“Plugins”，搜索“VisualVM Launcher”，安装重启即可，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM Launcher插件安装</div>
+
+<img src="images/image-20241208195557772.png" alt="image-20241208195557772" style="zoom:50%;" />
+
+2、配置Idea VisualVM Launcher插件，如下图所示。
+
+​	<span style="color:red;font-weight:bold;">由于Mac下Java没有随带jvisualvm命令，这里安装VisualVM。</span>
+
+​	安装后的命令目录是：/Applications/VisualVM.app/Contents/Resources/visualvm/bin/visualvm
+
+​	安装后的配置目录是：/Applications/VisualVM.app/Contents/Resources/visualvm/etc/visualvm.conf
+
+<div style="text-align:center;font-weight:bold;">配置VisualVM Launcher插件</div>
+
+<img src="images/image-20241208202121718.png" alt="image-20241208202121718" style="zoom:50%;" />
+
+3、通过IntelliJ IDEA中的VisualVM启动应用程序，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM Launcher启动应用程序</div>
+
+![image-20241208200741296](images/image-20241208200741296.png)
+
+​	启动VisualVM后，可以离线下载插件文件*.nbm，然后在“插件”对话框的“已下载”选项下，添加已下载的插件即可。建议各位读者安装VisualGC插件，该插件可以查看JVM垃圾回收的具体信息，VisualVM插件主页如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM插件主页</div>
+
+<img src="images/image-20241208203053049.png" alt="image-20241208203053049" style="zoom:50%;" />
+
+​	除了离线安装插件，也可以选择在线安装。在VisualVM中选择“工具”→“可用插件”，找到Visual GC插件，单击“安装”即可，如下图所
+
+示。
+
+<div style="text-align:center;font-weight:bold;">Visual GC插件在线安装</div>
+
+<img src="images/image-20241208203308794.png" alt="image-20241208203308794" style="zoom:50%;" />
+
+
+
+<span style="color:orange;font-weight:bold;">如何为Java VisualVM安装插件？</span>
+
+插件地址：https://visualvm.github.io/pluginscenters.html 拷贝对应JDK版本的插件地址。
+
+比如：
+
+- 查看Java版本
+
+```bash
+% java -version
+java version "1.8.0_91"
+Java(TM) SE Runtime Environment (build 1.8.0_91-b15)
+Java HotSpot(TM) 64-Bit Server VM (build 25.91-b15, mixed mode)
+```
+
+- 找到对应版本的插件地址
+
+得到JDK 8 Update 40 - 121（包含了版本1.8.0_91）的地址，点击后打开页面 https://visualvm.github.io/archive/uc/8u40/updates.html 上寻找到：
+
+Catalog URL:	https://visualvm.github.io/archive/uc/8u40/updates.xml.gz
+
+打开 `jvisualvm` -> 【工具】 -> 【插件】 -> 【设置】 -> 【编辑】 -> 粘贴拷贝的地址，结果如下：
+
+![image-20220522155255976](images/image-20220522155255976.png)
+
+配置之后，点击【可用插件】面板，选择Visual GC 和 BTrace Workbench插件。
+
+其他插件类似。
+
+### 22.3.2 连接方式
+
+​	启动VisualVM工具之后，它将自动搜索本机运行的JVM进程，同样不需要jps命令来查询指定。双击其中一个本地JVM进程即可开始监控，也可使用远程连接来连接远程服务器，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM连接应用程序</div>
+
+<img src="images/image-20241208212306641.png" alt="image-20241208212306641" style="zoom:50%;" />
+
+远程连接的时候需要注意以下事项。
+(1)确定远程服务器的ip地址。
+(2)添加JMX，通过JMX技术监控远端服务器具体是哪个Java进程。
+(3)如果连接的服务器是Tomcat，需要修改bin/catalina.sh文件。
+(4)在.../conf中添加jmxremote.access和jmxremote.password文件。
+(5)如果服务部署在阿里云，需要将服务器地址改为公网ip地址并且设置阿里云安全策略和防火墙策略。
+(6)启动tomcat，查看tomcat启动日志和端口监听。
+(7)JMX中输入端口号、用户名、密码登录。
+
+### 22.3.3 主要功能
+
+​	下面介绍VisualVM的主要功能，包括使用VisualVM生成内存快照、查看JVM参数、系统属性、查看运行中的JVM进程、生成／读取线程快照和程序资源的实时监控等。
+
+**1 使用VisualVM生成内存快照**
+
+​	VisualVM生成内存快照的方式有两种，如下所示。
+
+1、在“应用程序”窗口中右击应用程序节点，然后选择“堆Dump”，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM生成堆快照方式1</div>
+
+<img src="images/image-20241208214424051.png" alt="image-20241208214424051" style="zoom:50%;" />
+
+2、在“应用程序”窗口中双击应用程序节点以打开应用程序标签，然后在“监视”标签中单击“堆Dump”，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM生成堆快照方式2</div>
+
+<img src="images/image-20241208221701786.png" alt="image-20241208221701786" style="zoom:50%;" />
+
+​	VisualVM生成内存快照之后，选择内存快照文件，右击“另存为”按钮，即可保存内存快照到本地目录，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM保存堆快照</div>
+
+<img src="images/image-20241208221841956.png" alt="image-20241208221841956" style="zoom:50%;" />
+
+​	VisualVM中单击“文件”→“装入”，在文件类型一栏选择“堆”，选择要分析的dump文件即可打开堆文件，结果如下图所示。
+
+​	单击“堆Dump”工具栏中的“类”，以查看活动类和对应实例的列表。双击某个类名打开“实例”视图以查看实例列表。从列表中选择某个实例查看对该实例的引用。
+
+<div style="text-align:center;font-weight:bold;">VisualVM打开堆快照1</div>
+
+![image-20241208222353535](images/image-20241208222353535.png)
+
+<div style="text-align:center;font-weight:bold;">VisualVM打开堆快照2</div>
+
+<img src="images/image-20241208223234038.png" alt="image-20241208223234038" style="zoom:50%;" />
+
+**2 查看JVM参数和系统属性**
+
+​	使用jinfo可以查看的信息，在VisualVM中也可以查看。VisualVM查看JVM配置信息，直接在应用程序打开堆快照文件，在概述栏就可以看到JVM参数和系统属性，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM查看JVM参数和系统属性</div>
+
+<img src="images/image-20241208230630858.png" alt="image-20241208230630858" style="zoom:50%;" />
+
+**3 查看运行中的JVM进程**
+
+​	jps命令可以查看JVM进程信息，在VisualVM中也可以查看。VisualVM查看正在运行的JVM进程如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM查看JVM进程</div>
+
+<img src="images/image-20241209085626492.png" alt="image-20241209085626492" style="zoom:50%;" />
+
+**4 查看线程快照**
+
+​	jstack命令显示JVM当前时刻的线程快照，用来查找运行时死锁等问题的定位。VisualVM也可以生成JVM线程快照，生成线程快照的方式有两种。
+
+1、在“应用程序”窗口中右击应用程序节点，然后选择“线程Dump”，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM生成线程dump方式1</div>
+
+<img src="images/image-20241209085937029.png" alt="image-20241209085937029" style="zoom:50%;" />
+
+2、在“应用程序”窗口中双击应用程序节点以打开应用程序标签，然后在“线程”标签中单击“线程Dump”，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM生成线程dump方式2</div>
+
+<img src="images/image-20241209090133585.png" alt="image-20241209090133585" style="zoom:50%;" />
+
+​	VisualVM在线程快照页面，也可以右击保存快照，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM保存线程dump</div>
+
+<img src="images/image-20241209090336864.png" alt="image-20241209090336864" style="zoom:50%;" />
+
+**5 使用VisualVM检测死锁**
+
+​	依然使用代码<span style="color:blue;font-weight:bold;">案例2：死锁案例</span>，单击线程选项卡，如下图**VisualVM检测线程死锁**所示，可以看到提示信息“检测到死锁！”，单击右侧“线程Dump”按钮，即可看到死锁的明确信息，如下图**VisualVM线程dump**所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM检测线程死锁</div>
+
+<img src="images/image-20241209091032663.png" alt="image-20241209091032663" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">VisualVM线程dump</div>
+
+<img src="images/image-20241209090948816.png" alt="image-20241209090948816" style="zoom:50%;" />
+
+**6 程序资源的实时监控**
+
+​	jstat命令收集HotSpot虚拟机各方面的运行数据，可以对Java应用程序的资源和性能进行实时监控，主要包括GC情况和Heap Size资源使用情况。VisualVM通过“监视”选项卡对程序资源的实时监控，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM监视系统资源情况</div>
+
+<img src="images/image-20241209091349022.png" alt="image-20241209091349022" style="zoom:50%;" />
+
+​	通过Visual GC插件查看堆内存使用情况，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">VisualVM监视系统堆内存使用情况</div>
+
+<img src="images/image-20241209091547678.png" alt="image-20241209091547678" style="zoom:50%;" />
+
+## 22.4 Eclipse MAT
+
+​	MAT(Memory Analyzer Tool)工具是一款功能强大的Java堆内存分析器，用于查找内存泄漏以及查看内存消耗情况。在进行内存分析时，只要获得了反映当前设备内存映像的hprof文件，通过MAT打开就可以直观地看到当前的内存信息。
+
+​	在工作中遇到内存溢出这种灾难性的问题，那么程序肯定存在问题，找出问题至关重要。上文讲过jmap命令的使用方法，但是用jmap导出的文件，如果不使用工具看不到里面的内容，这个时候就可以使用MAT了，MAT工具能够解析这类二进制快照。MAT是基于Eclipse开发的，不仅可以单独使用，还可以作为插件的形式嵌入在Eclipse中使用。MAT是一款免费的性能分析工具，使用起来非常方便。各位读者可以下载并使用MAT，官网下载页面如下图所示。
+
+​	MAT官网地址：https://www.eclipse.org/mat/download
+
+<div style="text-align:center;font-weight:bold;">MAT下载页面</div>
+
+<img src="images/image-20241209132419385.png" alt="image-20241209132419385" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">MAT版本与JDK版本的关系</div>
+
+| MAT版本                        | JDK版本 |
+| ------------------------------ | ------- |
+| MemoryAnalyzer-1.15.0.20231206 | 17+     |
+| MemoryAnalyzer-1.14.0.20230315 | 17+     |
+| MemoryAnalyzer-1.13.0.20220615 | 11+     |
+| MemoryAnalyzer-1.12.0.20210602 | 11+     |
+| MemoryAnalyzer-1.11.0.20201202 | 1.8+    |
+
+​	只要确保机器上装有JDK并配置好相关的环境变量，MAT即可正常启动。也可以在Eclipse中以插件的方式安装。
+
+![image-20241012085631560](images/image-20241012085631560.png)
+
+​	若启动失败？
+
+<img src="images/image-20241209163531647.png" alt="image-20241209163531647" style="zoom:50%;" />
+
+​	调整MAT的配置。
+
+```bash
+% vim /Applications/MemoryAnalyzer.app/Contents/Info.plist 
+```
+
+![image-20241209164512095](images/image-20241209164512095.png)
+
+### 22.4.1 获取堆dump文件
+
+​	MAT可以分析堆dump文件。在进行内存分析时，只要获得了反映当前设备内存映像的hprof文件，通过MAT打开就可以直观地看到当前的内存信息。一般来说，这些内存信息内容如下。
+
+(1)所有的对象信息，包括对象实例、成员变量、存储于栈中的基本类型值和存储于堆中的其他对象的引用值。
+(2)所有的类信息，包括classloader、类名称、父类、静态变量等。
+(3)GCRoot到所有的这些对象的引用路径。
+(4)线程信息，包括线程的调用栈及此线程的线程局部变量(TLS)。
+	但是MAT不是一个万能工具，它并不能处理所有类型的堆存储文件。但是比较主流的厂家和格式，例如Sun、HP、SAP所采用的HPROF二进制堆存储文件，以及IBM的PHD堆存储文件等都能被很好地解析。
+	MAT最吸引人的还是能够快速为开发人员生成内存泄漏报表，方便定位问题和分析问题。虽然MAT有如此强大的功能，但是内存分析也没有简单到一键完成的程度，很多内存问题还是需要我们从MAT展现给我们的信息当中通过经验来判断才能发现，使用MAT打开dump文件时，会弹出向导窗口，保持默认选项，单击“Finish”，就会导向内存泄漏报告(Leak Suspects)页面，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">MAT打开Dump时的界面</div>
+
+<img src="images/image-20241209165634676.png" alt="image-20241209165634676" style="zoom:50%;" />
+
+​	分析堆内存信息，首先要获取堆dump文件，获取方式有以下几种。
+
+(1)通过第21章介绍的jmap工具生成，可以生成任意一个Java进程的dump文件。
+(2)通过配置JVM参数生成，配置参数选项“-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath”或“-XX:+HeapDumpBeforeFullGC”。选项“-XX:HeapDumpPath”所代表的含义就是当程序出现OutofMemory时，将会在相应的目录下生成一份dump文件。如果不指定选项“-XX:HeapDumpPath”则在当前目录下生成dump文件。考虑到生产环境中几乎不可能在线对系统分析，大都是采用离线分析，因此使用“jmap+MAT工具+配置JVM参数”是最常见的一套组合拳。
+
+(3)使用VisualVM可以导出堆dump文件。
+
+4)使用MAT既可以打开一个已有的堆快照，也可以通过MAT直接从活动Java程序中导出堆快照。该功能将借助jps列出当前正在运行的Java进程，以供选择并获取快照，如下图和所示。
+
+<div style="text-align:center;font-weight:bold;">MAT获取堆dump文件</div>
+
+<div style="dispaly:flex">
+  <img src="images/image-20241209171112909.png" style="zoom:40%"/>
+  <img src="images/image-20241209171212046.png" style="zoom:51%"/>
+</div>
+
+### 22.4.2 分析堆dump文件
+
+#### Overriew-概述
+
+![image-20241013171636001](images/image-20241013171636001.png)
+
+​	下面我们分别看一下MAT展示的各个标签页的含义。
+
+#### Leak Suspects-内存泄露报告
+
+​	打开堆dump文件，进入内存泄漏报告界面，“Leak Suspects”是MAT分析的可能有内存泄漏嫌疑的地方，可以体现出哪些对象被保存在内存中，以及为什么它们没有被垃圾回收器回收，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">内存泄漏报告界面</div>
+
+<img src="images/image-20241209174011692.png" alt="image-20241209174011692" style="zoom:50%;" />
+
+​	如果打开dump时跳过了的话，也可以从其他入口进入。
+
+​	可以在工具栏上单击“Run Expect System Test”→“Leak Suspects”选项，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">内存泄漏报告界面入口(1)</div>
+
+<img src="images/image-20241209174052141.png" alt="image-20241209174052141" style="zoom:50%;" />
+
+​	也可以从Overview页面的“Reports”选项中的“Leak Suspects”部分进入，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">内存泄漏报告界面入口(2)</div>
+
+<img src="images/image-20241209174235354.png" alt="image-20241209174235354" style="zoom:50%;" />
+
+#### Histogram-直方图
+
+​	MAT的histogram（直方图）和jmap的-histo子命令一样，都能够展示各个类的实例数目以及这些实例的浅堆(Shallow Heap)或者深堆(Retained Heap)总和。除此之外，MAT的直方图还可以将直方图中的类按照超类、类加载器或者包名分组。
+
+​	单击Overview页面Actions区域内的“Histogram”视图，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">histogram报告界面入口</div>
+
+<img src="images/image-20241209174724168.png" alt="image-20241209174724168" style="zoom:50%;" />
+
+​	histogram视图如下图所示。
+
+<div style="text-align:center;font-weight:bold;">histogram报告界面</div>
+
+<img src="images/image-20241209174919038.png" alt="image-20241209174919038" style="zoom:50%;" />
+
+​	视图以类的维度展示每个类的实例存在的个数、占用的浅堆和深堆（见下文）大小，分别排序显示。从histogram视图可以看出，哪个类的对象实例数量比较多，以及占用的内存比较大，浅堆与深堆的区别会在下文说明。不过，多数情况下，在histogram视图看到实例对象数量比较多的类都是一些基础类型，如char[]、String、byte[]，所以仅这些是无法判断出具体导致内存泄漏的类或者方法的，可以使用“List objects”或“Merge Shortest Paths to GC roots”等功能继续分析数据。如果histogram视图展示的数量多的实例对象不是基础类型，是有嫌疑的某个类，如项目代码中自定义对象类型，那么就要重点关注了。
+
+#### 浅堆与深堆
+
+- Shallow Heap ： 浅堆
+
+  <span style="color:red;font-weight:bold;">浅堆指一个对象所消耗的内存。</span>在32位系统中，一个对象引用会占4字节，一个int类型会占4字节，long型变量会占8字节，每个对象头需要占8字节。根据堆快照格式不同，对象的大小可能会向8字节进行对齐。
+
+  以JDK7中的String为例，String类中有2个int类型属性，分别是hash32、hash,2个int值共占8字节，此外String类型的对象引用ref占用4字节，对象头8字节，合计20字节，向8字节对齐，故占24字节，如下表所示。
+
+  | 变量类型 | 变量名 | 变量值                    |
+  | -------- | ------ | ------------------------- |
+  | int      | hash32 | 0                         |
+  | int      | hash   | 0                         |
+  | ref      | value  | C:\Users\Administrator... |
+
+  这24字节为String对象的浅堆大小。它与String的value实际取值无关，无论字符串长度如何，浅堆大小始终是24字节。
+
+- Retained Heap ： 深堆
+
+  <span style="background-color:#ffe400;font-weight:bold;">保留集（Retained Set）：</span>
+
+  在理解深堆之前，需要先了解保留集(Retained Set)的概念，<span style="color:#FF00FF;font-weight:bold;">对象A的保留集指当对象A被垃圾回收后，可以被释放的所有的对象集合（包括对象A本身），即对象A的保留集可以被认为是只能通过对象A被直接或间接访问到的所有对象的集合。通俗地说，就是指仅被对象A所持有的对象的集合</span>。
+
+  <span style="background-color:#ffe400;font-weight:bold;">深堆（Retained Heap）：</span>
+
+  <span style="color:red;font-weight:bold;">深堆是指对象的保留集中所有的对象的浅堆大小之和。</span>深堆和浅堆的区别是浅堆指对象本身占用的内存，不包括其内部引用对象的大小。一个对象的深堆指只能通过该对象访问到的（直接或间接）所有对象的浅堆之和，即对象被回收后，可以释放的真实空间。
+
+  注意：浅堆指对象本身占用的内存，不包括其内部引用对象的大小。一个对象的深堆指只能通过该对象访问到的（直接或间接）所有对象的浅堆之和，即对象被回收后，可以释放的真实空间。
+
+- 对象实际大小
+
+  另外一个常用的概念是对象的实际大小。这里，对象的实际大小定义为一个对象所能触及的所有对象的浅堆大小之和，也就是通常意义上我们说的对象大小。与深堆相比，似乎这个在日常开发中更为直观和被人接受，<span style="color:red;font-weight:bold;">但实际上，这个概念和垃圾收集无关</span>
+
+  下图显示了一个简单的对象引用关系图，对象A引用了C和D，对象B引用了C和E。那么对象A的浅堆大小只是A本身，不含C和D，而A的实际大小为A、C、D三者之和。而A的深堆大小为A与D之和，由于对象C还可以通过对象B访问到，因此不在对象A的深堆范围内。
+
+
+<div style="text-align:center;font-weight:bold;">对象引用关系图</div>
+
+<img src="images/image-20241209204141260.png" alt="image-20241209204141260" style="zoom: 33%;" />
+
+​	通过如下代码，详细了解MAT中深堆大小的计算方式，配置JVM参数，生成nurse.hprof堆文件。
+
+<span style="color:#40E0D0;">案例1：理解深堆大小计算方式</span>
+
+- 代码：NurseTrace类
+
+```java
+package com.coding.jvm07.gui.nurse;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 护士给园区的工作人员注射疫苗
+ * <p>
+ * VM options：-XX:+HeapDumpBeforeFullGC -XX:HeapDumpPath=/Users/wenqiu/Misc/nurse.hprof
+ */
+public class NurseTrace {
+    static List<People> peopleList = new ArrayList<>();
+
+    /**
+     * 创建100个需要打疫苗的人员
+     */
+    static Integer peopleNum = 100;
+
+    public static void createInjectPeople() {
+        for (int i = 0; i < peopleNum; i++) {
+            People people = new People();
+            people.setAddress("beijingshi" + Integer.toString(i) + "号");
+            people.setNum(Integer.toString(i));
+            peopleList.add(people);
+        }
+    }
+
+    public static void main(String[] args) {
+        // 创建了100个需要打疫苗的人员
+        createInjectPeople();
+        // 创建3个护士
+        Nurse nurse3 = new Nurse(3, "ZhangSan");
+        Nurse nurse5 = new Nurse(5, "LiSi");
+        Nurse nurse7 = new Nurse(7, "WangWu");
+        for (int i = 0; i < peopleList.size(); i++) {
+            if (i % nurse3.getId() == 0) {
+                nurse3.inject(peopleList.get(i));
+            }
+            if (i % nurse5.getId() == 0) {
+                nurse5.inject(peopleList.get(i));
+            }
+            if (i % nurse7.getId() == 0) {
+                nurse7.inject(peopleList.get(i));
+            }
+        }
+        peopleList.clear();
+        System.gc();
+    }
+}
+
+```
+
+- 代码：People类
+
+```java
+package com.coding.jvm07.gui.nurse;
+
+/**
+ * 需要打疫苗的人员
+ */
+public class People {
+    /**
+     * 人员信息
+     */
+    private String address;
+
+    /**
+     * 人员年龄
+     */
+    private String num;
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public String getNum() {
+        return num;
+    }
+
+    public void setNum(String num) {
+        this.num = num;
+    }
+}
+
+```
+
+- 代码：Nurse类
+
+```java
+package com.coding.jvm07.gui.nurse;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 护士人员
+ */
+public class Nurse {
+    private int id;
+    private String name;
+    private List<People> history = new ArrayList<>();
+
+    public Nurse(int id, String name) {
+        super();
+        this.id = id;
+        this.name = name;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public List<People> getHistory() {
+        return history;
+    }
+
+    public void setHistory(List<People> history) {
+        this.history = history;
+    }
+
+    public void inject(People wp) {
+        if (wp != null) {
+            history.add(wp);
+        }
+    }
+}
+
+```
+
+​	执行后可得到hprof文件，打开堆文件，进入thread_overview页面，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">thread_overview页面</div>
+
+<img src="images/image-20241210095149016.png" alt="image-20241210095149016" style="zoom:50%;" />
+
+​	找到3名护士的引用，如下图所示，为读者阅读方便，这里已经标出了每个实例的护士名。除了对象名称外，MAT还给出了浅堆大小和深堆大小。可以看到，所有Nurse类的浅堆统一为24字节，和它们持有的内容无关，而深堆大小各不相同，这和每名护士注射的人员多少有关。为了获得WangWu护士注射过的人员，可以在WangWu的记录中通过“外部引用(Outgoing References)”查找，就可以找到由WangWu可以触及的对象，也就是他负责注射过疫苗的人员。
+
+<div style="text-align:center;font-weight:bold;">如何打开WangWu对象的外部引用</div>
+
+<img src="images/image-20241210130737358.png" alt="image-20241210130737358" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">WangWu对象的外部引用</div>
+
+![image-20241210131839411](images/image-20241210131839411.png)
+
+​	可以看到，堆中完整显示了所有WangWu护士的history中的人员（都是编号可以被7整除的人员）。如果现在希望查看哪些护士给“beijingshi0号”的人员注射过疫苗，则可以在对应的人员对象中通过“Incoming References”查找。如下图所示，显然该人员被3名护士都注射过疫苗，这里假如疫苗可以被注射3次。
+
+<div style="text-align:center;font-weight:bold;">如何打开”beijingshi0号“人员的内部引用</div>
+
+<img src="images/image-20241210132317940.png" alt="image-20241210132317940" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">”beijingshi0号“人员的内部引用</div>
+
+<img src="images/image-20241210132752671.png" alt="image-20241210132752671" style="zoom:50%;" />
+
+​	在这个实例中，我们再来理解一下深堆的概念，如图<span style="color:blue;font-weight:bold;">WangWu对象的外部引用</span>所示，在护士WangWu注射疫苗的人群中，一共有15条数据，其中13条People占144字节的空间（深堆），2条People占136字节的空间（深堆），之所以会产生不同的字节数，是因为地址长度不一样造成的。而15条数据合计共占13×144+2×136 = 2144字节。而history中的elementData数组实际深堆大小为1224字节。这是因为部分人员People既被WangWu注射疫苗，又被其他护士注射疫苗，因此WangWu并不是唯一可以引用到它们的对象，对于这些对象的大小，自然不应该算在护士WangWu的深堆中。根据程序的规律，只要人员编号(num)被3或者5整除，都不应该计算在内，满足条件的人员编号（能被3和7整除，或者能被5和7整除）有0、21、35、42、63、70、84。它们合计大小为1×136+6×144=1000字节，故WangWu的history对象中的elementData数组的深堆大小为2144-1000+80=1224字节。这里的80字节表示elementData数组的浅堆大小，由于elementData数组长度为15，每个引用占4字节，合计4×15=60字节，数组对象头大小为12字节（Object[] elementData，对象头8字节+引用4字），数组长度占4字节，合计60 + 8 + 4 = 76字节，须向后看齐8字节，对齐填充后最终为80字节。
+
+#### Dominator Tree-支配树
+
+​	支配树(Dominator Tree)的概念源自图论。MAT提供了一个称为支配树的对象图。支配树体现了对象实例间的支配关系。在对象引用图中，所有指向对象B的路径都经过对象A，则认为对象A支配对象B。如果对象A是离对象B最近的一个支配对象，则认为对象A为对象B的直接支配者。支配树是基于对象间的引用图所建立的，它有以下基本性质。
+
+​	对象A的子树（所有被对象A支配的对象集合）表示对象A的保留集(Retained Set)，即深堆。如果对象A支配对象B，那么对象A的直接支配者也支配对象B。支配树的边与对象引用图的边不直接对应。如下图所示，左图表示对象引用图，右图表示左图所对应的支配树。对象A和对象B由根对象直接支配，由于在到对象C的路径中，可以经过对象A，也可以经过对象B，因此对象C的直接支配者也是根对象。对象F与对象D相互引用，因为到对象F的所有路径必然经过对象D，因此，对象D是对象F的直接支配者。而到对象D的所有路径中，必然经过对象C，即使是从对象F到对象D的引用，从根节点出发，也是经过对象C的，所以，对象D的直接支配者为对象C。
+
+<div style="text-align:center;font-weight:bold;">支配树例图</div>
+
+<img src="images/image-20241210152235396.png" alt="image-20241210152235396" style="zoom: 33%;" />
+
+​	同理，对象E支配对象G。到达对象H的可以通过对象D，也可以通过对象E，因此对象D和对象E都不能支配对象H，而经过对象C既可以到达对象D也可以到达对象E，因此对象C为对象H的直接支配者。在MAT中，单击工具栏上的对象支配树按钮，可以打开对象支配树视图，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">MAT支配树</div>
+
+<img src="images/image-20241210153709296.png" alt="image-20241210153709296" style="zoom:50%;" />
+
+​	下图显示了对象支配树视图的一部分。该截图显示部分WangWu护士的history队列的直接支配对象。即当WangWu对象被回收，也会一并回收的所有对象。显然能被3或者5整除的人员不会出现在该列表中，因为它们同时被另外两名护士对象引用。
+
+<div style="text-align:center;font-weight:bold;">MAT支配树界面</div>
+
+<img src="images/image-20241210160131905.png" alt="image-20241210160131905" style="zoom:50%;" />
+
+#### Thread Overview-线程概述
+
+​	Thread Overview界面的入口在工具栏上，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">MAT Thread Overview界面入口</div>
+
+<img src="images/image-20241210160438215.png" alt="image-20241210160438215" style="zoom:50%;" />
+
+​	Thread Overview界面如下图所示。
+
+<div style="text-align:center;font-weight:bold;">MAT Thread Overview界面</div>
+
+<img src="images/image-20241210160841312.png" alt="image-20241210160841312" style="zoom:50%;" />
+
+​	在Thread Overview视图可以看到线程对象／线程栈信息、线程名、Shallow Heap、Retained Heap、类加载器、是否Daemon线程等信息。
+
+​	在分析内存Dump的MAT中还可以看到线程栈信息，这本身就是一个强大的功能，类似于jstack命令的效果。而且还能结合内存Dump分析，看到线程栈帧中的本地变量，在左下方的对象属性区域还能看到本地变量的属性。
+
+#### 获得对象相互引用的关系
+
+​	在Histogram或Dominator Tree视图中，想要看某个条目（对象／类）的引用关系图，可以使用“List objects”功能。在某个条目上右击，选择“List object”，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">查看对象引用关系</div>
+
+<img src="images/image-20241210162532405.png" alt="image-20241210162532405" style="zoom:50%;" />
+
+​	“with outgoing references”表示查看当前对象持有的外部对象引用，“with incoming references”表示查看当前对象被哪些外部对象引用。
+
+假设对象A和对象B持有对象C的引用；对象C持有对象D和对象E的引用。
+
+- List Objects
+  - with outgoing references ： 对象C引用的所有对象都称为 outgoing references。比如：D和E对象。表示，查看C引用了那些对象。
+    - C=>D
+    - C=>E
+  - with incoming references ： 拥有对象C的引用的所有对象都称为对象C的 incoming references。比如：A和B。表示，查看谁引用了C对象。
+    - A=>C
+    - B=>C
+- Merge Shortest Paths to GC Roots ： 查看对象到GC Roots的最短路径
+  - 右键选择 exclude all phantom/wek/soft etc. references 选项
+
+### 22.4.3 支持使用OQL语言查询对象信息
+
+​	MAT支持一种类似于SQL的查询语言OQL(Object Query Language)。OQL使用类SQL语法，可以在堆中进行对象的查找和筛选。
+
+​	Object Query Language界面的入口在工具栏上，如下图所示。
+
+<img src="images/image-20241210165040658.png" alt="image-20241210165040658" style="zoom:50%;" />
+
+​	Object Query Language界面如下图所示。
+
+<div style="text-align:center;font-weight:bold;">Object Query Language界面</div>
+
+<img src="images/image-20241210165216262.png" alt="image-20241210165216262" style="zoom:50%;" />
+
+​	录入OQL语句后，点击红色感叹号<span style="color:red;font-weight:bold;font-size:20px;">！</span>或者F5即可执行查询。
+
+#### Select子句
+
+​	在MAT中，Select子句的格式与SQL基本一致，用于指定要显示的列。Select子句中可以使用“*”，查看结果对象的引用实例（相当于outgoing references）。
+
+```sql
+select * from java.util.Vector v
+```
+
+​	以上查询的输出结果如下图所示，在输出结果中，结果集中的每条记录都可以展开，查看各自的引用对象。
+
+<div style="text-align:center;font-weight:bold;">Select查询结果</div>
+
+<img src="images/image-20241210170044071.png" alt="image-20241210170044071" style="zoom:50%;" />
+
+​	使用“OBJECTS”关键字，可以将返回结果集中的项以对象的形式显示，如下所示。
+
+```sql
+select objects v.elementData from java.util.Vector v
+select objects s.value from java.lang.String s
+```
+
+​	结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">OBJECTS查询结果</div>
+
+<img src="images/image-20241210170704206.png" alt="image-20241210170704206" style="zoom:50%;" />
+
+​	Select子句中，使用“AS RETAINED SET”关键字可以得到所得对象的保留集。
+
+```sql
+select as retained set * from com.coding.jvm07.gui.nurse.Nurse
+```
+
+​	结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">AS RETAINED SET查询结果</div>
+
+<img src="images/image-20241210171246848.png" alt="image-20241210171246848" style="zoom:50%;" />
+
+​	“DISTINCT”关键字用于在结果集中去除重复对象。
+
+```sql
+select distinct objects classof(s) from java.lang.String s
+```
+
+​	结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">DISTINCT查询结果</div>
+
+<img src="images/image-20241210171620359.png" alt="image-20241210171620359" style="zoom:50%;" />
+
+#### From子句
+
+​	From子句用于指定查询范围，它可以指定类名、正则表达式或者对象地址。
+
+```sql
+select * from java.lang.String s
+```
+
+​	结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">From查询结果</div>
+
+<img src="images/image-20241210171957882.png" alt="image-20241210171957882" style="zoom:50%;" />
+
+​	下面使用正则表达式限定搜索范围，输出com.coding包下所有类的实例。
+
+```sql
+select * from "com.coding..*"
+```
+
+<div style="text-align:center;font-weight:bold;">范围查询结果</div>
+
+<img src="images/image-20241210172436295.png" alt="image-20241210172436295" style="zoom:50%;" />
+
+​	也可以直接使用类的地址进行搜索。使用类的地址的好处是可以区分被不同ClassLoader加载的同一种类型。
+
+```sql
+select * from 0x8203a0300
+```
+
+​	注意：0x8203a0300必须是一个<class>，
+
+![image-20241210173429805](images/image-20241210173429805.png)
+
+​	否则会提示：
+
+![image-20241210173215424](images/image-20241210173215424.png)
+
+​	结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">对象地址查询结果</div>
+
+<img src="images/image-20241210173645679.png" alt="image-20241210173645679" style="zoom:50%;" />
+
+#### Where 子句
+
+​	Where子句用于指定OQL的查询条件。OQL查询将只返回满足Where子句指定条件的对象。Where子句的格式与传统SQL极为相似。
+
+​	下面返回长度大于10的char[]数组。
+
+```sql
+select * from char[] s where s.@length>10
+```
+
+​	结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">Where查询结果</div>
+
+<img src="images/image-20241210174331100.png" alt="image-20241210174331100" style="zoom:50%;" />
+
+​	下面返回包含“Java”子字符串的所有字符串，使用“LIKE”操作符，“LIKE”操作符的操作参数为正则表达式。
+
+```sql
+select * from java.lang.String s where toString(s) like ".*java.*"
+```
+
+​	结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">LIKE查询结果</div>
+
+<img src="images/image-20241210174646806.png" alt="image-20241210174646806" style="zoom:50%;" />
+
+​	下面返回所有value域不为null的字符串，使用“=”操作符。
+
+```sql
+select * from java.lang.String s where s.value!=null
+```
+
+​	结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">=”查询结果</div>
+
+<img src="images/image-20241210174924162.png" alt="image-20241210174924162" style="zoom:50%;" />
+
+​	Where子句支持多个条件的AND、OR运算。下面返回数组长度大于5，并且深堆大于10字节的所有Vector对象。
+
+```sql
+select * from java.util.Vector v where v.elementData.@length>5 and v.@retainedHeapSize>10
+```
+
+​	结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">多条件查询结果</div>
+
+<img src="images/image-20241210175339586.png" alt="image-20241210175339586" style="zoom:50%;" />
+
+#### 内置对象与方法
+
+​	OQL中可以访问堆内对象的属性，也可以访问堆内代理对象的属性。访问堆内对象的属性时格式如下，其中alias为对象名称。
+
+```sql
+[<alias>.] <field>.<field>.<field>
+```
+
+​	使用下面的语句可以访问java.io.File对象的path属性，并进一步访问path的value属性。
+
+```sql
+SELECT toString(f.path.value)FROM java.io.File f
+```
+
+​	下面的语句显示了String对象的内容、objectid和objectAddress。
+
+```sql
+SELECT s.toString(),s.@objectId,s.@objectAddress FROM java.lang.String s
+```
+
+​	下面的语句显示java.util.Vector内部数组的长度。
+
+```sql
+SELECT v.elementData.@length FROM java.util.Vector v
+```
+
+​	下面的语句显示了所有的java.util.Vector对象及其子类型。
+
+```sql
+select * from INSTANCEOF java.util.Vector
+```
+
+### 22.4.4 Tomcat案例分析
+
+​	Tomcat是最常用的Java Servlet容器之一，同时也可以当作单独的Web服务器使用。Tomcat本身使用Java实现，并运行于JVM之上。在大规模请求时，Tomcat有可能会因为无法承受压力而发生内存溢出错误。这里根据一个被压垮的Tomcat的堆快照文件，来分析Tomcat在崩溃时的内部情况。
+
+​	打开Tomcat堆内存文件，如下图所示，显示了Tomcat溢出时的总体信息，可以看到堆的大小为29.7MB。从统计饼图中得知，当前深堆最大的对象为StandardManager，它持有大约16.4MB的对象。
+
+​	一般来说，我们总是会对占用空间最大的对象特别感兴趣，如果可以查看Standard Manager内部究竟引用了哪些对象，对于分析问题可能会起到很大的帮助。因此，在饼图中单击StandardManager所在区域，在弹出菜单中选择“with outgoing references”命令，查看其持有的外部对象引用，如下图所示，这样将会列出被StandardManager引用的所有对象。
+
+<div style="text-align:center;font-weight:bold;">Tomcat堆内存文件</div>
+
+<img src="images/image-20241210231910949.png" alt="image-20241210231910949" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">StandardManager持有的外部对象引用</div>
+
+<img src="images/image-20241211123955867.png" alt="image-20241211123955867" style="zoom:50%;" />
+
+​	外部对象为sessions对象，它占用了约17MB空间，结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">StandardManager对象的内部引用</div>
+
+<img src="images/image-20241211124140036.png" alt="image-20241211124140036" style="zoom:50%;" />
+
+​	可以看到sessions对象为ConcurrentHashMap，其内部分为16个Segment。从深堆大小看，每个Segment都比较平均，大约为1MB，合计17MB，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">ConcurrentHashMap对象</div>
+
+<img src="images/image-20241211124420060.png" alt="image-20241211124420060" style="zoom:50%;" />
+
+​	单击ConcurrentHashMap可以得到其value为Session对象，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">查找Session对象</div>
+
+<img src="images/image-20241211124535052.png" alt="image-20241211124535052" style="zoom:50%;" />
+
+​	通过OQL语句“SELECT OBJECTS s from org.apache.catalina.session.StandardSession s”查找当前堆中session对象的数量，发现其含有9941个session，并且每一个session的深堆为1592字节，合计约15MB，达到当前堆大小的50%。由此可以知道，当前Tomcat发生内存溢出的原因，极可能是由于在短期内接收大量不同客户端的请求，从而创建大量session导致，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">查找所有session对象</div>
+
+<img src="images/image-20241211124815266.png" alt="image-20241211124815266" style="zoom:50%;" />
+
+​	单击session对象，如下图所示，在左侧的对象属性表中，可以看到所选中的session的最后访问时间和创建时间。
+
+<div style="text-align:center;font-weight:bold;">session内部数据</div>
+
+<img src="images/image-20241211125132631.png" alt="image-20241211125132631" style="zoom:50%;" />
+
+​	通过OQL语句和MAT的排序功能，可以找到当前系统中最早创建的session和最后创建的session，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">最早和最晚创建的session</div>
+
+<img src="images/image-20241211125245696.png" alt="image-20241211125245696" style="zoom:50%;" />
+
+​	根据当前的session总数，可以计算每秒的平均压力为：9941/(1403324677648-1403324645728)×1000=311次／秒。由此推断，在发生Tomcat堆溢出时，Tomcat在连续30秒的时间内，平均每秒接收了约311次不同客户端的请求，创建了合计9941个session。
+
+## 22.5 JProfiler
+
+### 22.5.1 概述
+
+​	如果在运行Java程序的时候想查看内存占用情况，在Eclipse里面有MAT插件可以看，在IntelliJ IDEA中也有类似的插件，就是JProfiler。JProfiler是由ej-technologies公司开发的一款Java应用性能诊断工具。
+
+​	JProfiler使用方便、界面操作友好，对被分析的应用影响小，对系统的CPU、Thread、Memory分析功能尤其强大，支持对jdbc、noSql、jsp、servlet和socket等进行分析，支持多种模式（离线、在线）的分析，支持监控本地、远程的JVM，而且跨平台，拥有多种操作系统的安装版本。
+
+​	主要功能有以下几个方面。
+
+(1)对方法调用的分析可以帮助了解应用程序正在做什么，并找到提高其性能的方法。
+(2)通过分析堆上对象，引用链和垃圾收集能帮助修复内存泄漏等问题。
+(3)提供多种针对线程和锁的分析视图帮助分析多线程问题。
+(4)支持对子系统进行集成分析，例如JDBC的调用，可以帮助找到执行比较慢的SQL语句。
+
+### 22.5.2 安装与配置
+
+​	官网下载页面如下图所示。
+
+​	官网下载地址：https://www.ej-technologies.com/products/jprofiler/overview.html
+
+<div style="text-align:center;font-weight:bold;"> JProfiler下载页面</div>
+
+![iShot_2024-12-11_14.05.43](images/iShot_2024-12-11_14.05.43.png)
+
+​	下载安装成功后，点击启动；启动完以后需要在JProfiler配置IntelliJ IDEA开发工具，如下所示。
+
+(1)选择“Session”→“IDE Integration”，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler配置IntelliJ IDEA</div>
+
+<img src="images/image-20241211161311187.png" alt="image-20241211161311187" style="zoom:50%;" />
+
+(2)单击“Integrate”按钮，选择对应的IntelliJ IDEA版本，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler配置IntelliJ IDEA</div>
+
+<img src="images/image-20241211161030497.png" alt="image-20241211161030497" style="zoom:50%;" />
+
+(3)单击“OK”即可，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler配置IntelliJ IDEA</div>
+
+<img src="images/image-20241211161159644.png" alt="image-20241211161159644" style="zoom:50%;" />
+
+​	上面步骤执行完毕后，这里会自动配置完成。
+
+<div style="text-align:center;font-weight:bold;">IntelliJ IDEA上的配置效果1</div>
+
+<img src="images/image-20241211162442373.png" alt="image-20241211162442373" style="zoom:50%;" />
+
+​	若要选择 Profile 'JProfilerTest' with 'IntelliJ Profiler'，会在IDEA中内嵌打开JProfiler效果如下图：
+
+<div style="text-align:center;font-weight:bold;">IntelliJ IDEA上的配置效果2(Profile 'JProfilerTest' with 'IntelliJ Profiler')</div>
+
+<img src="images/image-20241211163204933.png" alt="image-20241211163204933" style="zoom:50%;" />
+
+​	若要选择 Profile 'JProfilerTest' with JProfiler，会自动打开JProfiler效果如下图：
+
+<div style="text-align:center;font-weight:bold;">IntelliJ IDEA上的配置效果3(Profile 'JProfilerTest' with JProfiler)</div>
+
+<img src="images/image-20241211163419853.png" alt="image-20241211163419853" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">IntelliJ IDEA后台日志</div>
+
+![image-20241211164341307](images/image-20241211164341307.png)
+
+### 22.5.3 具体使用
+
+#### JProfier数据采集方式
+
+​	数据采集方式分为两种，分别是Sampling（样本采集）和Instrumentation（重构模式），打开JProfier的时候进行选择，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler数据采集方式界面</div>
+
+<img src="images/image-20241211165341255.png" alt="image-20241211165341255" style="zoom:50%;" />
+
+​	1、Instrumentation是JProfiler全功能模式。在加载类之前，JProfier把相关功能代码写入需要分析的class的bytecode中，对正在运行的JVM有一定影响。该方式的优点是功能强大。在此设置中，调用堆栈信息是准确的。缺点是如果要分析的class较多，则对应用的性能影响较大，CPU开销可能很高（取决于Filter的控制）。因此使用此模式一般配合Filter使用，只对特定的类或包进行分析。
+
+​	2、Sampling类似于样本统计，每隔一定时间(5ms)将每个线程栈方法栈中的信息统计出来。该方式的优点是对CPU的开销非常低，对应用影响小。缺点是一些数据／特性不能提供，例如方法的调用次数、执行时间。
+
+​	需要注意的是，JProfiler本身没有指出数据的采集类型，这里的采集类型是针对方法调用的采集类型。因为JProfiler的绝大多数核心功能都依赖方法调用采集的数据，所以可以直接认为是JProfiler的数据采集类型。
+
+#### 遥感监测（Telemetries，查看JVM的运行信息）
+
+​	1、整体视图(Overview)：显示堆内存、CPU、线程以及GC等活动视图，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler遥感监测界面</div>
+
+<img src="images/image-20241211165937885.png" alt="image-20241211165937885" style="zoom:50%;" />
+
+​	2、内存(Memory)：显示一张关于内存变化的活动时间表，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler遥感监测之内存界面</div>
+
+<img src="images/image-20241211170625093.png" alt="image-20241211170625093" style="zoom:50%;" />
+
+​	3、记录的对象(Recorded objects)：显示一张关于活动对象与数组的活动时间表，如下图所示，可以看到，在程序运行16分21秒后，非数组类型(Non-arrays)的活动对象的数量是130个，数组类型(Arrays)的对象是0个。
+
+<div style="text-align:center;font-weight:bold;">JProfiler遥感监测之记录的对象界面</div>
+
+<img src="images/image-20241211172349656.png" alt="image-20241211172349656" style="zoom:50%;" />
+
+​	4、记录吞吐量(Record Throughput)：对象创建和回收对象记录，记录单位时间间隔内对象创建和回收的数量，如下图所示，在程序运行17分37秒后，JVM此时每秒回收520个对象，每秒创建87个对象。
+
+<div style="text-align:center;font-weight:bold;">JProfiler遥感监测之吞吐量界面</div>
+
+<img src="images/image-20241211172535899.png" alt="image-20241211172535899" style="zoom:50%;" />
+
+​	5、垃圾收集活动(GC Activity)：显示一张关于垃圾回收活动的活动时间表，如下图所示，可以看到在程序运行22分10秒后，JVM此时回收的内存占比是3.68%。
+
+<div style="text-align:center;font-weight:bold;">JProfiler遥感监测之垃圾收集活动界面</div>
+
+<img src="images/image-20241211173003524.png" alt="image-20241211173003524" style="zoom:50%;" />
+
+​	6、类(Classes)：显示一个CPU分析和非CPU分析已装载类的活动时间表，非CPU分析的类是Filter设置中未包含的类，对于样本统计，CPU将分析组成样本的类，而不分析JVM中加载的其他类。如下图所示，图中时刻CPU分析了17个类，非CPU分析的类有1895个，全部类的数量为1912个，如果想要改变CPU分析类的数量，通过“Session”→“Session Settings”→“Define Filters”即可在Filter选项中设置。
+
+<div style="text-align:center;font-weight:bold;">JProfiler遥感监测之类界面</div>
+
+<img src="images/image-20241211173209376.png" alt="image-20241211173209376" style="zoom:50%;" />
+
+​	7、线程(Threads)：表示线程活动状态的时间表，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler遥感监测之线程界面</div>
+
+<img src="images/image-20241211173523795.png" alt="image-20241211173523795" style="zoom:50%;" />
+
+​	8、CPU负载(CPU Load)：显示一段时间中CPU的负载图表，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler遥感监测之CPU负载界面</div>
+
+<img src="images/image-20241211173625705.png" alt="image-20241211173625705" style="zoom:50%;" />
+
+#### 内存视图(Live memory)
+
+​	剖析内存中对象的相关信息。例如查看对象的个数、大小、对象创建的方法执行栈，以及对象创建的热点。
+
+​	1、所有对象(All Objects)：显示所有加载的类的列表和在堆上分配的实例数，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler内存界面</div>
+
+<img src="images/image-20241211174005962.png" alt="image-20241211174005962" style="zoom:50%;" />
+
+​	2、记录对象(Record Objects)：查看特定时间段对象的分配，并记录分配的调用堆栈。如下图所示，可以看到对象的分配数量等信息，也可以修改对象分配和记录的比例。
+
+<div style="text-align:center;font-weight:bold;">JProfiler记录对象界面</div>
+
+<img src="images/image-20241211174424046.png" alt="image-20241211174424046" style="zoom:50%;" />
+
+​	3、分配访问树(Allocation Call Tree)：显示一棵请求树，可以根据方法、类、包、组件等信息展示，默认不展示图表，需要手动单击右侧按钮查看，如下图所示。图<span style="color:blue;font-weight:bold;">JProfiler分配访问树界面</span>展示了按照方法展示访问树的图表效果。
+
+<div style="text-align:center;font-weight:bold;">JProfiler分配访问树界面</div>
+
+<img src="images/image-20241211212604192.png" alt="image-20241211212604192" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">JProfiler分配访问树界面</div>
+
+<img src="images/image-20241211212849726.png" alt="image-20241211212849726" style="zoom:50%;" />
+
+​	4、分配热点(Allocation Hot Spots)：显示一个列表，可以根据方法、类、包或组件展示内存分配的热点信息，对于每个热点都可以显示它的跟踪记录树，不再过多介绍。
+
+<div style="text-align:center;font-weight:bold;">JProfile分配热点界面</div>
+
+<img src="images/image-20241211213102943.png" alt="image-20241211213102943" style="zoom:50%;" />
+
+​	5、类追踪器(Class Tracker)：类追踪器视图可以包含任意数量的图表，显示选定的类和包的实例与时间，如下图所示，在程序不断创建对象的过程中，对象数量的变化曲线在逐步增高。
+
+<div style="text-align:center;font-weight:bold;">JProfiler类追踪器界面</div>
+
+<img src="images/image-20241211213316706.png" alt="image-20241211213316706" style="zoom:50%;" />
+
+#### 堆遍历(Heap Walker)
+
+​	堆遍历对一定时间内收集的内存对像信息进行静态分析，该模块可以明确查看对象的引用关系，功能强大且使用方便，包含对象的outgoing reference、incoming reference和biggest object等选项。
+
+​	1、类“Classes”：显示所有类和它们的实例，可以右击具体的类“Used Selected Instance”实现进一步跟踪，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler类界面</div>
+
+<img src="images/image-20241211215336605.png" alt="image-20241211215336605" style="zoom:50%;" />
+
+​	2、分配(Allocations)：为所有记录对象显示分配树和分配热点，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler对象分配界面</div>
+
+<img src="images/image-20241212000117092.png" alt="image-20241212000117092" style="zoom:50%;" />
+
+​	3、引用(References)：为单个对象和“显示到垃圾回收根目录的路径”提供索引图的显示功能。还能提供合并输入视图和输出视图的功能，和MAT中的with outgoing references功能一样，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler对象引用界面</div>
+
+<img src="images/image-20241212001050489.png" alt="image-20241212001050489" style="zoom:50%;" />
+
+​	4、时间(Time)：显示一个对已记录对象集的分配时间直方图。
+​	5、检查(Inspections)：显示一个数量的操作，将分析当前对象集在某种条件下的子集，实质是一个筛选的过程。
+​	6、图表(Graph)：需要在references视图和biggest视图手动添加对象到图表，它可以显示对象的传入和传出引用，便于找到垃圾收集器根源。
+
+#### CPU视图(CPU views)
+
+​	JProfiler提供不同的方法来记录访问树以优化性能和细节。线程或者线程组以及线程状况可以被所有的视图选择。所有的视图可以在方法、类、包或组件等不同层面上展示。
+​	1、访问树(Call Tree)：显示一个积累的自顶向下的树，以树结构自顶向下显示线程方法调用树以及各个方法对CPU的使用情况，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfilerCPU之访问树界面</div>
+
+<img src="images/image-20241212001814512.png" alt="image-20241212001814512" style="zoom:50%;" />
+
+​	2、热点(Hot Spots)：显示消耗时间最多的方法的列表。对每个热点方法都能够显示回溯树，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfilerCPU之热点方法界面</div>
+
+<img src="images/image-20241212002210519.png" alt="image-20241212002210519" style="zoom:50%;" />
+
+​	3、访问图(Call Graph)：显示一个从已选方法、类、包或J2EE组件开始的访问队列的图，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfilerCPU之访问图界面</div>
+
+<img src="images/image-20241212002345355.png" alt="image-20241212002345355" style="zoom:50%;" />
+
+#### 线程视图(Threads)
+
+​	JProfiler通过对线程历史的监控判断其运行状态，并监控是否有线程阻塞产生，还能将一个线程所管理的方法以树状形式呈现。对线程剖析，依旧使用如下代码来进行测试。
+
+<span style="color:#40E0D0;">案例1：死锁案例</span>
+
+- 代码
+
+```java
+package com.coding.jvm07.cmd;
+
+/**
+ * 演示线程的死锁问题
+ * 互相的 BLOCKED 导致-> Found one Java-level deadlock:
+ */
+public class ThreadDeadLock {
+    public static void main(String[] args) {
+        StringBuilder sb1 = new StringBuilder();
+        StringBuilder sb2 = new StringBuilder();
+
+        new Thread(() -> {
+            synchronized (sb1) {
+                sb1.append("a");
+                sb2.append("1");
+
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                synchronized (sb2) {
+                    sb1.append("b");
+                    sb2.append("2");
+
+                    System.out.println("sb1 = " + sb1);
+                    System.out.println("sb2 = " + sb2);
+                }
+            }
+        }).start();
+
+        new Thread(() -> {
+            synchronized (sb2) {
+                sb1.append("c");
+                sb2.append("3");
+
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+
+                synchronized (sb1) {
+                    sb1.append("d");
+                    sb2.append("4");
+
+                    System.out.println("sb1 = " + sb1);
+                    System.out.println("sb2 = " + sb2);
+                }
+            }
+        }).start();
+
+    }
+}
+
+```
+
+​	1、程历史(Thread History)：显示一个与线程活动和线程状态在一起的活动时间表，如下图中可以看到，两个线程始终处于阻塞状态，红色代表Blocked。
+
+<div style="text-align:center;font-weight:bold;">JProfiler历史线程界面</div>
+
+<img src="images/image-20241212003444657.png" alt="image-20241212003444657" style="zoom:50%;" />
+
+​	2、线程监控(Thread Monitor)：显示一个列表，包括所有的活动线程以及它们目前的活动状况，如下图所示，目前线程依然是阻塞状态。
+
+<div style="text-align:center;font-weight:bold;">JProfiler线程监控界面</div>
+
+<img src="images/image-20241212003645048.png" alt="image-20241212003645048" style="zoom:50%;" />
+
+​	3、线程转储(Thread Dumps)：显示所有线程的堆栈跟踪，下图中截取了两个时间段的线程dump。对比图22-100，从而可以查看线程不同时间段的状态。
+
+<div style="text-align:center;font-weight:bold;">JProfiler线程dump界面</div>
+
+<img src="images/image-20241212004022907.png" alt="image-20241212004022907" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">JProfiler线程比对界面</div>
+
+<img src="images/image-20241212004144442.png" alt="image-20241212004144442" style="zoom:50%;" />
+
+​	线程分析主要关心以下三个方面。
+
+​	1、Web容器的线程最大数，比如Tomcat的线程容量应该略大于最大并发数。
+​	2、线程阻塞。
+​	3、线程死锁。
+
+#### 监控和锁(Monitors&Locks)
+
+​	所有线程持有锁的情况以及锁的信息，观察JVM的内部线程并查看状态。
+
+​	1、死锁探测图表(Current Locking Graph)：显示JVM中的当前死锁图表，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler线程死锁界面</div>
+
+![image-20241212004607454](images/image-20241212004607454.png)
+
+​	2、目前使用的监测器(Current Monitors)：显示目前使用的监测器并且包括它们的关联线程，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler线程检测器界面</div>
+
+<img src="images/image-20241212004743431.png" alt="image-20241212004743431" style="zoom:50%;" />
+
+​	3、锁定历史图表(Locking History Graph)：显示记录在JVM中的锁定历史。
+
+​	4、历史检测记录(Monitor History)：显示重大的等待事件和阻塞事件的历史记录。
+
+​	5、监控器使用统计(Monitor Usage Statistics)：显示分组监测，线程和监测类的统计监测数据。
+
+### 22.5.4 案例分析
+
+​	下面我们写一段程序来进行JProfiler分析，如下代码所示。
+
+<span style="color:#40E0D0;">案例1：JProfiler案例</span>
+
+- 代码
+
+```java
+package com.coding.jvm07.jprofiler;
+
+import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 功能演示测试：正常程序
+ */
+public class JProfilerTest {
+    public static void main(String[] args) {
+        while (true) {
+            ArrayList list = new ArrayList();
+            for (int i = 0; i < 500; i++) {
+                Data data = new Data();
+                list.add(data);
+            }
+
+            try {
+                TimeUnit.MILLISECONDS.sleep(500);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+}
+
+class Data {
+    private int size = 10;
+    private byte[] buffer = new byte[1024 * 1024]; // 1mb
+    private String info = "hello,world";
+}
+
+```
+
+​	通过JProfiler打开该程序，观察内存区域视图，可以发现，当内存使用到一段时间以后，会有一个快速回落的过程，这是由于GC造成的，最终形成一个锯齿的形状，比较平稳，这种一般来说都是比较正常的情况，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JProfiler内存GC界面</div>
+
+<img src="images/image-20241212005952662.png" alt="image-20241212005952662" style="zoom:50%;" />
+
+​	观察对象的过程中，也会发现Data对象的数量经过一段时间后就会变少，同样是GC的效果，如下图<span style="color:blue;font-weight:bold;">JProfiler类对象分配界面1</span>和图<span style="color:blue;font-weight:bold;">JProfiler类对象分配界面2</span>所示，前者图中Data对象数量是2000，一段时间后，后者图中Data对象数量减少为1500。
+
+<div style="text-align:center;font-weight:bold;">JProfiler类对象分配界面1</div>
+
+<img src="images/image-20241212010149982.png" alt="image-20241212010149982" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">JProfiler类对象分配界面2</div>
+
+<img src="images/image-20241212010206910.png" alt="image-20241212010206910" style="zoom:50%;" />
+
+## 22.6 Arthas
+
+### 22.6.1 基本概述
+
+​	前面，我们介绍了JDK自带的VisualVM等免费工具，以及商业化工具JProfiler。这两款工具在业界知名度也比较高，它们的优点是可以在图形界面上看到各维度的性能数据，使用者根据这些数据进行综合分析，然后判断哪里出现了性能问题。
+
+​	但是这两款工具也有个缺点，都必须在服务端项目进程中配置相关的监控参数，然后工具通过远程连接到项目进程，获取相关的数据。这样就会带来一些不便，比如线上环境的网络是隔离的，本地的监控工具根本连不上线上环境。那么有没有一款工具不需要远程连接，也不需要配置监控参数，同时也提供了丰富的性能监控数据呢？下面跟大家介绍一款阿里巴巴开源的性能分析神器Arthas（阿尔萨斯），如下图所示。
+
+<div style="text-align:center;font-weight:bold;">Arthas图标</div>
+
+![hero](images/arthas_light.png)
+
+​	Arthas是Alibaba开源的JVM诊断工具，深受开发者喜爱。开发者在线排查问题，无须项目重启，Arthas会动态跟踪Java程序，实时监控JVM状态。
+
+​	Arthas支持JDK 6+，支持Linux/Mac/Windows，采用命令行交互模式，同时提供丰富的Tab自动补全功能，进一步方便进行问题的定位和诊断。
+
+​	当各位读者遇到以下类似问题而束手无策时，Arthas可以帮助解决。这个类从哪个jar包加载的？为什么会报各种类相关的Exception？修改的代码为什么没有执行到？遇到问题无法在线上debug，难道只能通过加日志再重新发布吗？线上遇到某个用户的数据处理有问题，但线上同样无法debug，线下无法重现。是否有一个全局视角来查看系统的运行状况？有什么办法可以监控到JVM的实时运行状态？Arthas代码基于Greys二次开发而来，Arthas的命令行实现基于termd开发，文本渲染功能基于crash中的文本渲染功能开发，命令行界面基于vert.x提供的cli库进行开发，等等，集各家所长开发的一款工具。下面作者带大家一起走进Arthas。
+
+### 22.6.2 安装与使用
+
+#### 安装
+
+​	Arthas官方文档地址为https://arthas.aliyun.com/。Arthas有以下两种下载方式。
+
+​	1、可以直接在Linux上通过wget或者curl命令下载，选择GitHub或者尝试国内的码云Gitee下载。
+
+
 
 # 第23章 JVM运行时参数
 
 # 第24章 GC日志分析
 
-# 第25章 性能优化案例
+# 第25章 OOM分类及解决方案
+
+# 第26章 性能优化案例
 
 # 分割线========================
 
-- 大厂面试篇
-
-![image-20241007134709678](images/image-20241007134709678.png)
-
-
-
-
-
-### 类的加载过程
-
-![image-20230415194104058](images/image-20230415194104058.png)
-
-
-
 ![image-20230416121332413](images/image-20230416121332413.png)
 
-上述的四者，是指User Defined Class Loader部分。
 
-
-
-### 用户自定义类加载器实现步骤
-
-1）开发人员可以通过继承抽象类`java.lang.ClassLoader`类的方式，实现自己的类加载器，以满足一些特殊的需求；
-
-2）在JDK1.2之前，在自定义类加载亲时，总会去继承ClassLoader类并重写loadClass()方法，从而实现自定义的类加载类，但是在JDK1.2之后已不再建议用户去覆盖loadClass()方法，而是建议把自定义的类加载逻辑写在findClass()方法中；
-
-3）在编写自定义类加载器时，如果没有太过于复杂的需求，可以直接继承URLClassLoader类，这样就可以避免自己去编写findClass()方法及其获取字节码流的方式，使自定义类加载器编写更加简洁。
-
-### 关于ClassLoader
-
-ClassLoader类，它是一个抽象类，其后所有的类加载器都继承自ClassLoader（不包括启动类加载器）。
-
-| 方法名称                                          | 描述                                                         |
-| ------------------------------------------------- | ------------------------------------------------------------ |
-| getParent()                                       | 返回该类加载器的超类加载器                                   |
-| loadClass(String name)                            | 加载名称为name的类，返回结果为java.lang.Class类的实例        |
-| findClass(String name)                            | 查找名称为name的类，返回结果为java.lang.Class类的实例        |
-| findLoadedClass(String name)                      | 查找名称为name的已经被加载过的类，返回结果为java.lang.Class类的实例 |
-| defineClass(String name,byte[] b,int off,int len) | 把字节数组b中的内容转换为一个Java类，返回结果为java.lang.Class类的实例 |
-| resolveClass(Class<?> c)                          | 连接指定的一个Java类                                         |
-
-### 获取ClassLoader的途径
-
-方式一：获取当前类的ClassLoader
-
-clazz.getClassLoader()
-
-方式二：获取当前线程上下文的ClassLoader
-
-Thread.currentThread().getContextClassLoader()
-
-方式三：获取系统的ClassLoader
-
-ClassLoader.getSystemClassLoader()
-
-方法四：获取调用者的ClassLoader
-
-DriverManager.getCallerClassLoader()
 
 
 
@@ -12367,34 +14312,6 @@ DriverManager.getCallerClassLoader()
 
 
 ![image-20240725124156003](images/image-20240725124156003.png)
-
-#### 栈的相关面试题
-
-- 举例栈溢出（StackOverflowError）的情况。
-
-  - 如果线程请求分配的栈容量超过Java虚拟机栈允许的最大容量，Java虚拟机将会抛出一个<span style="color:red;font-weight:bold;">StackOverflowError</span>异常。
-  - 如果Java虚拟机栈可以动态扩展，并且在尝试扩展的时候无法申请到足够的内存，会抛出一个<span style="color:red;font-weight:bold;">OutOfMemoryError</span>异常
-
-- 调整栈大小，就能保证不出现溢出吗？
-
-  - 不能
-
-- 分配的栈内存越大越好吗？
-
-  - 当然不是，栈内存过大会导致可以启动的线程数量变少。何谈高并发？且会挤占其他运行时数据区子模块的内存空间。
-
-- 垃圾回收是否会涉及到虚拟机栈？
-
-  | 运行时数据区子模块                     | Error | GC   |
-  | -------------------------------------- | ----- | ---- |
-  | 方法区（Method Area）                  | 有    | 有   |
-  | 堆（Heap）                             | 有    | 有   |
-  | 程序计数器（Program Counter Register） | 无    | 无   |
-  | 本地方法栈（Native Method Stack）      | 有    | 无   |
-  | 虚拟机栈（Java Virtual Machine Stack） | 有    | 无   |
-
-- 方法中定义的局部变量是否线程安全？
-  - 是线程安全的。
 
 ### 堆（Heap）
 
@@ -12470,1751 +14387,7 @@ DriverManager.getCallerClassLoader()
 
 ![image-20240914130228189](images/image-20240914130228189.png)
 
-
-
-
-
-
-
-从程序中类的使用过程看：
-
-![image-20241003192329077](images/image-20241003192329077.png)
-
-
-
 # 五、性能监控（命令行、可视化工具）（<span style="color:red;font-weight:bold;">下篇</span>）
-
-## 1、概述
-
-### 1.1、大厂面试题
-
-如何进行JVM调优？有哪些方法？
-
-如何理解内存泄漏问题？有哪些情况会导致内存泄漏？如何解决？
-
-- 支付宝
-
-支付宝三面：JVM性能调优都做了什么？
-
-- 小米
-
-有做过JVM内存优化吗？
-
-从SQL、JVM、架构、数据库四个方面讲讲优化思路
-
-- 蚂蚁金服
-
-JVM的编译优化
-
-JVM性能调优都做了什么
-
-JVM诊断调优工具用过哪些？
-
-二面：JVM怎么样调优，堆内存、栈空间设置多少合适？
-
-三面：JVM相关的分析工具使用过的有哪些？具体的性能调优步骤如何？
-
-- 阿里
-
-如何进行JVM调优？有哪些方法？
-
-如何理解内存泄漏问题？有哪些情况会导致内存泄漏？如何解决？
-
-- 字节跳动
-
-三面：JVM如何调优、参数怎么调？
-
-- 拼多多
-
-从SQL、JVM、架构、数据库四个方面讲讲优化思路。
-
-- 京东
-
-JVM诊断调优工具用过哪些？
-
-每秒几十万并发的秒杀系统为什么会频繁发生GC？
-
-日均百万级交易系统如何优化JVM？
-
-线上生产系统OOM如何监控及定位于解决？
-
-高并发系统如何基于G1垃圾回收器优化性能？
-
-### 1.2、背景说明
-
-#### 1.2.1、生产环境中的问题
-
-<span style="color:blue;font-weight:bold;">生产环境发生了内存溢出该如何处理？</span>
-
-<span style="color:blue;font-weight:bold;">生产环境应该给服务器分配多少内存合适？</span>
-
-<span style="color:blue;font-weight:bold;">如何对垃圾回收器的性能进行调优？</span>
-
-<span style="color:blue;font-weight:bold;">生产环境CPU负载飙高该如何处理？</span>
-
-<span style="color:blue;font-weight:bold;">生产环境应该给应用分配多少线程合适？</span>
-
-<span style="color:blue;font-weight:bold;">不加log，如何确定请求是否执行了某一行代码？</span>
-
-<span style="color:blue;font-weight:bold;">不加log，如何实时查看某个方法的入参与返回值？</span>
-
-#### 1.2.2、为什么要调优？
-
-- 防止出现OOM
-- 解决OOM
-- 减少Full GC出现的频率
-
-#### 1.2.3、不同阶段的考虑
-
-- 上线前
-- 项目运行阶段
-- 线上出现OOM
-
-### 1.3、调优概述
-
-#### 1.3.1、监控的依据
-
-- 运行日志
-- 异常堆栈
-- GC日志
-- 线程快照
-- 堆转储快照
-
-#### 1.3.2、调优的大方向
-
-- 合理地编写代码
-- 充分并合理的使用硬件资源
-- 合理地进行JVM调优
-
-### 1.4、性能优化的步骤
-
-#### 1.4.1、第1步（发现问题）：性能监控
-
-一种以非强行或者入侵方式<span style="color:red;font-weight:bold;">收集或查看</span>应用运营性能数据的活动。
-
-监控通常是指一种在生产、质量评估或者开发环境下实施的带有<span style="color:red;font-weight:bold;">预防或主动性</span>的活动。
-
-当应用相关干系人提出性能问题却<span style="color:red;font-weight:bold;">没有提供足够多的线索时</span>，首先我们需要进行性能监控，随后是性能分析。
-
-- GC频繁
-
-- cpu load过高
-
-- OOM
-- 内存泄漏
-- 死锁
-- 程序响应时间较长
-
-#### 1.4.2、第2步（排查问题）：性能分析
-
-一种以<span style="color:red;font-weight:bold;">侵入方式</span>收集运行性能数据的活动，它会影响应用的吞吐量或响应性。
-
-性能分析是针对性能问题的答复结果，关注的范围通常比性能监控更加集中。
-
-性能分析很少在生产环境下进行，通常是在质量评估、<span style="color:red;font-weight:bold;">系统测试或者开发环境下进行</span>，是性能监控之后的步骤。
-
-- 打印GC日志，通过GCViewer或者http://gceasy.io来分析日志信息
-- 灵活运用命令行工具，如：jstack、jmap、jinfo等
-- dump出堆文件，使用内存分析工具分析文件
-- 使用阿里Arthas或jconsole，JVisualVM来实时查看JVM状态
-- jstack查看堆栈信息
-
-#### 1.4.3、第3步（解决问题）：性能调优
-
-一种为改善应用响应性或吞吐量而更改参数、源代码、属性配置的活动，性能调优是在性能监控、性能分析之后的活动。
-
-- 适当增加内存，根据业务背景选择垃圾回收器
-- 优化代码，控制内存使用
-- 增加机器，分散节点压力
-- 合理设置线程池线程数量
-- 使用中间件提高程序效率，比如缓存，消息队列等
-- 其他……
-
-### 1.5、性能评价/测试指标
-
-#### 1.5.1、<span style="color:red;font-weight:bold;">停顿时间（响应时间）</span>
-
-提交请求和返回改请求的响应之间使用的时间，一般比较关注平均响应时间。
-
-常用操作的响应时间列表：
-
-| 操作                              | 响应时间 |
-| --------------------------------- | -------- |
-| 打开一个站点                      | 几秒     |
-| 数据库查询一条记录（有索引）      | 十几毫秒 |
-| 机械磁盘一次寻址定位              | 4毫秒    |
-| 从机械磁盘顺序读取1M数据          | 2        |
-| 从SSD磁盘顺序读取1M数据           | 0.3毫秒  |
-| 从远程分布式缓存Redis读取一个数据 | 0.5毫秒  |
-| 从内存读取1M数据                  | 十几微秒 |
-| Java程序本地方法调用              | 几微秒   |
-| 网络传输2KB数据                   | 1微秒    |
-
-在垃圾回收环境中：
-
-暂停时间：<span style="color:red;font-weight:bold;">执行垃圾收集时，程序的工作线程被暂停的时间。</span>
-
--XX:MaxGCPauseMillis
-
-#### 1.5.2、<span style="color:red;font-weight:bold;">吞吐量</span>
-
-- 对单位时间内完成的工作量（请求）的量度
-- 在GC中：运行用户代码的时间占总运行时间的比例（总运行时间：程序运行时间+内存回收时间）
-- 吞吐量为<span style="color:red;font-weight:bold;">1-1/(1+n)。-XX:GCTimeRatio=n</span>
-
-#### 1.5.3、并发数
-
-同一时刻，对服务器有实际交互的请求数
-
-#### 1.5.4、内存占用
-
-Java堆区所占的内存大小
-
-#### 1.5.5、相互间的关系
-
-以高速公路通行状况为例：
-
-- 吞吐量：每天通过高速公路收费站的车辆的数据（也可以理解为收费站收取的高速费）
-- 并发数：高速公路上正在行驶的车辆的数目
-- 响应时间：车速
-
-
-
-## 2、JVM监控及诊断工具-命令行篇
-
-### 2.1、概述
-
-性能诊断是软件工程师在日常工作中需要经常面对和解决的问题，在用户体验至上的今天，解决好应用的性能问题能带来非常大的收益。
-
-Java作为最流行的编程语言之一，其应用性能诊断一直受到业界广泛关注。可能造成Java应用出现性能问题的因素非常多，例如线程控制、磁盘读写、数据库访问、网络I/O、垃圾收集等。想要定位这些问题，一款优秀的性能诊断工具必不可少。
-
-<span style="background-color:#ffe400;font-weight:bold;">体会1：使用数据说明问题，使用知识分析问题，使用工具处理问题。</span>
-
-<span style="background-color:#ffe400;font-weight:bold;">体会2：无监控、不调优！</span>
-
-#### 简单命令行工具
-
-在我们刚接触Java学习的时候，大家肯定最先了解的两个命令就是javac，java，那么除此之外，还有没有其他的命令可以供我们使用呢？我们进入到安装jdk的bin目录，发现还有一系列辅助工具。这些辅助工具用来获取目标JVM不同方面、不同层次的信息，帮助开发人员很好地解决Java应用程序的一些疑难杂症。
-
-源码：https://hg.openjdk.org/jdk/jdk11/file/1ddf9a99e4ad/src/jdk.jcmd/share/classes/sun/tools
-
-<span style="color:green;font-weight:bold;">说明：[]表示可选，<>表示必须！</span>
-
-### 2.2、jps：查看正在运行的Java进程
-
-<span style="color:blue;font-weight:bold;">基本情况</span>
-
-jps（Java Process Status）：
-
-显示指定系统内所有的HotSpot虚拟机进程（查看虚拟机进程信息），可用于查询正在运行的虚拟机进程。
-
-说明：对于本地虚拟机进程来说，进程的本地虚拟机ID与操作系统的进程ID是一致的，是唯一的。
-
-<span style="color:blue;font-weight:bold;">基本语法</span>
-
-它的基本使用语法为：
-
-```bash
-jps [-q] [-mlvV] [<hostid>]
-```
-
-我们还可以通过追加参数，来打印额外的信息。
-
-- options参数
-
-  - -q ：仅仅显示LVMID（local virtual machine id），即本地虚拟机唯一id。不显示主类的名称等。
-  - -l ：输出应用程序主类的全类名 或 如果进程执行的是jar包，则输出jar完整路径
-  - -m ：输出虚拟机进程启动时传递给主类main()的参数
-  - -v ：列出虚拟机进程启动时的JVM参数。比如：-Xms20m -Xmx50m是启动程序指定的jvm参数。
-
-  说明：以上参数可以综合使用。
-
-  补充：如果某Java进程关闭了默认开启的UsePerfData参数（即使用参数 `-XX:-UsePerfData` ），那么jps命令（以及下面介绍的jstat）将无法探知该Java进程。
-
-- hostid参数
-
-  RMI注册表中注册的主机名。
-
-  如果想要远程监控主机上的java程序，需要安装 jstatd。
-
-  对于具有更严格的安全实践的网络场所而言，可能使用一个自定义的策略文件来显示对特定的可信主机或网络的访问，尽管这种技术容易受到IP地址欺诈攻击。
-
-  如果安全文档无法使用一个定制的策略文件来处理，那么最安全的操作是不运行jstatd服务器，而是在本地使用jstat和jps工具。
-
-<span style="color:blue;font-weight:bold;">基本用法</span>
-
-```bash
-$ jps -l
-```
-
-
-
-### 2.3、jstat：查看JVM统计信息
-
-<span style="color:blue;font-weight:bold;">基本情况</span>
-
-jstat （JVM Statistics Monitoring Tool）：用于监视虚拟机各种运行状态信息的命令行工具。它可以显示本地或者远程虚拟机进程中的类装载、内存、垃圾收集、JIT编译等运行数据。
-
-在没有GUI图形界面，只提供了纯文本控制台环境的服务器上，它将是运行期定位虚拟机性能问题的首选工具。常用于检测垃圾回收问题以及内存泄漏问题。
-
-官方文档：https://docs.oracle.com/javase/8/docs/technotes/tools/unix/jstat.html
-
-<span style="color:blue;font-weight:bold;">基本语法</span>
-
-它的基本使用语法为：
-
-```bash
-jstat -<option> [-t] [-h<lines>] <vmid> [<interval> [<count>]]
-```
-
-选项option可以由以下值构成。
-
-- options参数
-
-  - <span style="color:red;font-weight:bold;">类装载相关的：</span>
-
-    - -class ：显示ClassLoader的相关信息：类的装载数量、装载字节数、卸载数量、卸载字节数、类装载所消耗的时间。
-
-    ```bash
-    $ jstat -class 17640
-    Loaded  Bytes  Unloaded  Bytes     Time
-       699  1398.1        0     0.0       0.20
-    ```
-
-  - <span style="color:red;font-weight:bold;">JIT相关的：</span>
-
-    - -compiler ： 显示JIT编译器编译过的方法、耗时等信息。
-
-      ```bash
-      C:\Users\limin>jstat -compiler 20436
-      Compiled Failed Invalid   Time   FailedType FailedMethod
-            98      0       0     0.06          0
-      ```
-
-      - Compiled ：编译任务执行数量
-      - Failed  ：编译任务执行失败数量
-      - Invalid  ：编译任务执行失效数量
-      - Time ：编译任务消耗时间
-      - FailedType ：最后一个编译失败任务的类型
-      - FailedMethod ：最后一个编译失败任务所在的类及方法
-
-    - -printcompilation ： 输出已经被JIT编译的方法。
-
-      ```bash
-      C:\Users\limin>jstat -printcompilation 20436
-      Compiled  Size  Type Method
-            98     19    1 java/lang/StringBuffer <init>
-      ```
-
-      - Compiled ：编译任务的数目
-      - Site ：方法生成的字节码的大小
-      - Type ：编译类型
-      - Method ：类名和方法名用来标识编译的方法。类名使用/作为一个命名空间分隔符。方法名是给定类中的方法。上述格式是由`-XX:+PrintComplation`选项进行设置的。
-
-  - <span style="color:red;font-weight:bold;">垃圾回收相关的：</span>
-
-    - -gc ：显示与GC相关的堆信息。包括Eden区、两个Survivor区、老年代、永久代等的容量、已用空间、GC时间合计等信息。
-
-      ![image-20241008220438123](images/image-20241008220438123.png)
-
-      - 新生代相关
-        - S0C：是第一个幸存者区的大小（字节）
-        - S1C：是第二个幸存者区的大小（字节）
-        - S0U：是第一个幸存者区已使用的大小（字节）
-        - S1U：是第二个幸存者区已使用的大小（字节）
-        - EC：是Eden空间的大小（字节）
-        - EU：是Eden空间已使用大小（字节）
-      - 老年代相关
-        - OC：是老年代的大小（字节）
-        - OU：是老年代已使用的大小（字节）
-      - 方法区（元空间）相关
-        - MC：是方法区的大小
-        - MU：是方法区已使用的大小
-        - CCSC：是压缩类空间的大小
-        - CCSU：是压缩类空间已使用的大小
-      - 其他
-      - YGC：是指从应用程序启动到采样时young gc次数
-      - YGCT：是指从应用程序启动到采样时young gc消耗的时间（秒）
-      - FGC：是指从应用程序启动到采样时full gc次数
-      - FGCT：是指从应用程序启动到采样时full gc消耗的时间（秒）
-      - GCT：只从应用程序启动到采样时gc的总时间
-
-    - -gccapacity ：显示内容与-gc基本相同，但输出主要关注Java堆各个区域使用到的最大、最小空间。
-
-    - -gcutil ：显示内容与-gc基本相同，但输出主要关注已使用空间占总空间的百分比。
-
-      ![image-20241008222540889](images/image-20241008222540889.png)
-
-      - S0 ： 年轻代中第一个survivor（幸存区）已使用的占当前容量百分比
-      - S1 ： 年轻代中第二个survivor（幸存区）已使用的占当前容量百分比
-      - E ： 年轻代中Eden（伊甸园）已使用的占当前容量百分比
-      - O ： 老年代已使用的占当前容量百分比
-      - M ：永久代已使用的占当前容量百分比
-      - CCS ： 压缩类空间大小百分比
-      - YGC ： 新生代中gc次数
-      - YGCT ： 新生代中gc所用时间（秒）
-      - FGC ： 堆全gc次数（秒）
-      - FGCT ： 堆全GC花费总时间（秒）
-      - GCT ： 系统gc用的总时间（秒）
-
-    - -gccause ：与-gcutil功能一样，但是会额外输出导致最后一次或当前正在发生的GC产生的原因。
-
-      ![image-20241008222611601](images/image-20241008222611601.png)
-    
-      - LGCC ： 最后一次GC原因
-      - GCC ： 当前GC原因（No GC为当前没有执行GC)
-    
-    - -gcmetacapacity ： 显示metaspace的大小。
-    
-      ```bash
-      C:\Users\limin>jstat -gcmetacapacity 20436
-         MCMN       MCMX        MC       CCSMN      CCSMX       CCSC     YGC   FGC    FGCT     GCT
-             0.0  1056768.0     4480.0        0.0  1048576.0      384.0     0     0    0.000    0.000
-      ```
-    
-      - MCMN ：最小元数据容量
-      - MCMX ：最大元数据容量
-      - MC ：当前元数据空间大小
-    
-      - CCSMN ：最小压缩类空间大小
-      - CCSMX ：最大压缩类空间大小
-      - CCSC ：当前压缩类空间大小
-      - YGC ：新生代GC次数
-      - FGC ：堆全GC次数
-      - FGCT ：堆全GC时间（秒）
-      - GCT ：垃圾回收消耗总时间（秒）
-    
-    - -gcnew ：显示新生代GC状况。
-    
-      ```bash
-      C:\Users\limin>jstat -gcnew 20436
-       S0C    S1C    S0U    S1U   TT MTT  DSS      EC       EU     YGC     YGCT
-      4096.0 4096.0    0.0    0.0 15  15    0.0  25600.0   4621.4      0    0.000
-      ```
-    
-      - S0C ：第一个幸存区大小（KB）
-      - S1C ：第二个幸存区大小（KB）
-      - S0U ：第一个幸存区的使用大小（KB）
-      - S1U ：第二个幸存区的使用大小（KB）
-      - TT ：对象在新生代存活的次数
-      - MIT ：对象在新生代存活的最大次数
-      - DSS ：期望的幸存区大小
-      - EC ：新生代中Eden（伊甸园）的容量（KB）
-      - EU ：新生代中Eden（伊甸园）目前已使用空间（KB）
-      - YGC ：新生代gc次数
-      - YGCT ：新生代GC消耗的时间（秒）
-    
-    - -gcnewcapacity ： 显示内容与-gcnew基本相同，输出主要关注使用到的最大、最小空间。
-    
-      ```bash
-      C:\Users\limin>jstat -gcnewcapacity 20436
-        NGCMN      NGCMX       NGC      S0CMX     S0C     S1CMX     S1C       ECMX        EC      YGC   FGC
-         33792.0  1380352.0    33792.0 459776.0   4096.0 459776.0   4096.0  1379328.0    25600.0     0     0
-      ```
-    
-      - NGCMN ：新生代最小容量（KB）
-      - NGCMX ：新生代最大容量（KB）
-    
-      - NGC ：当前新生代容量（KB）
-      - S0CMX ：第一个幸存区最大大小（KB）
-      - S0C ：第一个幸存区容量（KB）
-      - S1CMX ：第二个幸存区最大大小（KB）
-      - S1C ：第二个幸存区容量（KB）
-    
-      - ECMX ：新生代中Eden（伊甸园）的最大容量 (KB)
-    
-      - EC ：新生代中Eden（伊甸园）的容量 (KB)
-    
-      - YGC ：新生代垃圾回收次数
-    
-      - FGC ：堆垃圾回收全GC次数
-    
-    - -gcold ： 显示老年代GC状况。
-    
-      ```bash
-      C:\Users\limin>jstat -gcold 20436
-         MC       MU      CCSC     CCSU       OC          OU       YGC    FGC    FGCT     GCT
-        4480.0    769.7    384.0     75.8     68608.0         0.0      0     0    0.000    0.000
-      ```
-    
-      - MC ：metaspace(元空间)的容量 (KB)
-    
-      - MU ：metaspace(元空间)目前已使用空间 (KB)
-    
-      - CCSC ：压缩类空间大小
-    
-      - CCSU ：压缩类空间使用大小
-    
-      - OC ：Old代的容量 (KB)
-    
-      - OU ：Old代目前已使用空间 (KB)
-    
-      - YGC ：新生代中gc次数
-    
-      - FGC ：堆全gc次数（秒）
-    
-      - FGCT ：堆全GC花费总时间（秒）
-    
-      - GCT ：系统gc用的总时间(秒)
-    
-    - -gcoldcapacity ： 显示内容与-gcold基本相同，输出主要关注使用到的最大、最小空间。
-    
-      ```bash
-      C:\Users\limin>jstat -gcoldcapacity 20436
-         OGCMN       OGCMX        OGC         OC       YGC   FGC    FGCT     GCT
-          68608.0   2760704.0     68608.0     68608.0     0     0    0.000    0.000
-      ```
-    
-      - OGCMN ：Old代中初始化(最小)的大小 (KB)
-    
-      - OGCMX ：Old代的最大容量(KB)
-    
-      - OGC ：Old代当前新生成的容量 (KB)
-      - OC ：Old代的容量 (KB)
-    
-      - YGC ：新生代中gc次数
-    
-      - FGC ：堆全gc次数（秒）
-    
-      - FGCT ：堆全GC花费总时间（秒）
-    
-      - GCT ：系统gc用的总时间(秒)
-    
-
-- -t参数 ： 可以在输出信息前加上一个 Timestamp 列，显示程序的运行时间。单位：秒
-
-  ​	我们可以比较Java进程的启动时间以及总GC时间（GCT列），或者两次测量的间隔时间以及总GC时间的增量，来得出GC时间占运行时间的比例。如果该比例超过20%，则说明目前堆的压力较大；如果该比例超过90%，则说明堆里几乎没有可用空间，随时都可能抛出OOM异常。
-
-- -h参数 ： 可以在周期性数据输出时，输出多少行数据就输出一个表头信息。
-
-- vmid ： 虚拟机进程id
-
-- interval参数 ： 用于指定输出统计数据的周期，单位为毫秒。即：查询间隔
-
-- count参数 ： 用于指定查询的总次数。
-
-<span style="color:blue;font-weight:bold;">基本用法</span>
-
-```bash
-$ jstat -class -t -h 3 17640 500 5
-```
-
-<span style="color:blue;font-weight:bold;">拓展</span>
-
-- jstat还可以用来判断是否出现内存泄漏。
-
-第1步：
-
-​	在常时间运行的Java程序中，我们可以运行jstat命令连续获取多行性能数据，并取这几行数据中OU列（即已占用的老年代内存）的最小值。
-
-第2步：
-
-​	然后，我们每隔一段较长的时间重复一次上述操作，来获得多组OU最小值。如果这些值呈现上涨趋势，则说明该Java程序的老年代内存已使用量在不断上涨，这意味着无法回收的对象在不断增加，因此很有可能存在内存泄漏。
-
-### 2.4、jinfo：实时查看和修改JVM配置参数
-
-<span style="color:blue;font-weight:bold;">基本情况</span>
-
-jinfo（Configuration Info For Java）
-
-查看虚拟机配置参数信息，也可以用于调整虚拟机的配置参数。
-
-在很多情况下，Java应用程序不会指定所有的Java虚拟机参数。而此时，开发人员可能不知道某一个具体的Java虚拟机参数的默认值。在这种情况下，可能需要通过查找文档获取某个参数的默认值。这个查找过程可能是非常艰难的。但有了jinfo工具，开发人员可以很方便地找到Java虚拟机参数的当前值。
-
-官方帮助文档：https://docs.oracle.com/en/java/javase/11/tools/jinfo.html
-
-<span style="color:blue;font-weight:bold;">基本语法</span>
-
-它的基本使用语法为：
-
-```bash
-jinfo [option] <pid>
-    (to connect to running process)
-jinfo [option] <executable <core>
-    (to connect to a core file)
-jinfo [option] [server_id@]<remote server IP or hostname>
-    (to connect to remote debug server)
-```
-
-选项option可以由以下值构成。
-
-- options
-
-  - <span style="color:red;font-weight:bold;">查看参数</span>
-
-    - no option ： 输出全部的参数和系统属性
-
-    - -flag name ： 输出对应名称的参数
-
-      ```bash
-      $ jinfo -flag UseParallelGC 20436
-      -XX:+UseParallelGC
-      ```
-
-    - -flags ： 输出全部的参数
-
-    - -sysprops ： 输出系统属性
-
-  - <span style="color:red;font-weight:bold;">修改参数</span>
-
-    jinfo不仅可以查看运行时某一个Java虚拟机参数的实际取值，甚至可以在运行时修改部分参数，并使之立即生效。
-
-    但是，并非所有参数都支持动态修改。参数只有被标记为manageable的flag可以被实时修改。
-
-    ```bash
-    # 查看manageable的参数
-    $ java -XX:+PrintFlagsFinal -version | grep manageable
-    ```
-
-    - -flag [+|-] name ： 开启或者关闭对应名称的参数，只有被标记为manageable的参数才可以被动态修改。<span style="color:blue;font-weight:bold;">针对Boolean类型参数</span>
-
-      ```bash
-      # 临时，实时修改
-      $ jinfo -flag +PrintGCDetails 20436
-      ```
-
-    - -flag name=value ： 设定对应名称的参数。<span style="color:blue;font-weight:bold;">针对非Boolean类型参数</span>
-
-      ```bash
-      # 临时，实时修改
-      $ jinfo -flag MaxHeapFreeRatio=100 20436
-      ```
-
-<span style="color:blue;font-weight:bold;">拓展</span>
-
-- java -XX:+PrintFlagsInitial ： 查看所有JVM参数启动的初始值
-- java -XX:+PrintFlagsFinal ： 查看所有JVM参数的最终值
-- java -XX:+PrintCommandLineFlags -version： 查看那些已经被用户或者JVM设置过的详细的XX参数的名称和值
-
-### 2.5、jmap：导出内存映像文件&内存使用情况
-
-<span style="color:blue;font-weight:bold;">基本情况</span>
-
-jmap（JVM Memory Map）：作用一方面是获取dump文件（堆转储快照文件，二进制文件），它还可以获取目标Java进程的内存相关信息，包括Java堆各区域的使用情况、堆中对象的统计信息、类加载信息等。
-
-开发人员可以在控制台中输入命令“jmap -help”查阅jmap工具的具体使用方式和一些标准选项配置。
-
-官方帮助文档：https://docs.oracle.com/en/java/javase/11/tools/jmap.html
-
-<span style="color:blue;font-weight:bold;">基本语法</span>
-
-它的基本使用语法为：
-
-```bash
-jmap [option] <pid>
-    (to connect to running process)
-jmap [option] <executable <core>
-    (to connect to a core file)
-jmap [option] [server_id@]<remote server IP or hostname>
-    (to connect to remote debug server)
-```
-
-选项option可以由以下值构成。
-
-- option
-  - <span style="color:red;font-weight:bold;">-dump ： 生成dump文件</span>
-    - 说明：
-      - 生成Java堆转储快照：dump文件
-      - 特别的：-dump:live 只保存堆中的存活对象
-  - -finalizerinfo ： 查看堆积在finalizer队列中的对象
-    - 说明：
-      - 显示在F-Queue中等待Finalizer线程执行finalize方法的对象
-      - <span style="color:blue;font-weight:bold;">仅linux/solaris平台有效</span>
-  - <span style="color:red;font-weight:bold;">-heap ： 输出整个堆空间的详细信息，包括GC的使用、堆配置信息，以及内存的使用信息等</span>
-    - 说明：输出整个堆空间的详细信息，包括GC的使用、堆配置信息，以及内存的使用信息等。
-  - <span style="color:red;font-weight:bold;">-histo ： 输出堆空间中对象的统计信息，包括类、实例数量和合计容量</span>
-    - 说明：
-      - 输出堆对象的统计信息，包括类、实例数量和合计容量
-      - 特别的：-histo:live 只统计堆中的存活对象
-  - -permstat ： 以ClassLoader为统计口径输出永久代的内存状态信息
-    - 说明：
-      - 以ClassLoader为统计口径输出永久代的内存状态信息
-      - <span style="color:blue;font-weight:bold;">仅linux/solaris平台有效</span>
-  - -F ： 当虚拟机进程堆 -dump 选项没有任何相应时，强制执行生成dump文件
-    - 说明：
-      - 当虚拟机进程对-dump选项没有任何响应时，可使用此选项强制执行生成dump文件
-      - <span style="color:blue;font-weight:bold;">仅linux/solaris平台有效</span>
-  - -J `<flag>` ： 传递参数给jmap启动的jvm
-
-
-
-<span style="color:blue;font-weight:bold;">拓展</span>
-
-<span style="color:orange;font-weight:bold;">导出内存映像文件</span>
-
-一般来说，使用jmap指令生成dump文件的操作算得上是最常用的jmap命令之一，将堆中所有存活对象导出至一个文件之中。
-
-Heap Dump又叫做堆存储文件，指一个Java进程在某个时间点的内存快照。Heap Dump在触发内存快照的时候会保存此刻的信息如下：
-
-- All Objects
-
-Class,fields,primitive values and references
-
-- All Classes
-
-ClassLoader,name,super class,static fields
-
-- Garbage Collection Roots
-
-Objects defined to be reachable by the JVM
-
-- Thread Stacks and Local Variables
-
-The cass-stacks of threads at the moment of the snapshot,and per-frame information about local objects
-
-说明：
-
-1. 通常在写Heap Dump文件前会触发一次Full GC，所以heap dump文件里保存的都是FullGC后留下的对象信息。
-2. 由于生成dump文件比较耗时，因此大家需要耐心等待，尤其是大内存镜像生成dump文件则需要耗费更长的时间来完成。
-
-- 手动方式
-
-  - jmap -dump:format=b,file=<filename.hprof> `<pid>`
-
-  - <span style="color:red;font-weight:bold;">jmap -dump:live,format=b,file=<filename.hprof> `<pid>`</span>
-  
-- 自动方式
-
-  当程序发生OOM退出系统时，一些瞬时信息都随着程序的终止而消失，而重现OOM问题往往比较困难或者耗时。此时若能在OOM时，自动导出dump文件就显得非常迫切。
-
-  这里介绍一种比较常用的取得堆快照文件的方法，即使用：
-
-  - -XX:+HeapDumpOnOutOfMemoryError
-    - 在程序发生OOM时，导出应用程序的当前对快照。
-  - -XX:HeapDumpPath=<filename.hprof>
-    - 可以指定堆快照的保存位置。
-
-  比如：-Xms60m -Xmx60m -XX:SurvivorRatio=8 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=D:\5.hprof
-
-<span style="color:orange;font-weight:bold;">显式堆内存相关信息</span>
-
-```bash
-jmap -heap 21500 
-jmap -histo 21500
-```
-
-<span style="color:orange;font-weight:bold;">其他作用</span>
-
-```bash
-jmap -permstat pid
-jmap -finalizerinfo
-```
-
-<span style="color:blue;font-weight:bold;">小结</span>
-
-​	由于jmap将访问堆中的所有对象，为了保证在此过程中不被应用线程干扰，jmap需要借助安全点机制，让所有线程停留在不改变堆中数据的状态。也就是说，由jmap导出的堆快照必定是安全点位置的。这可能导致基于该堆快照的分析结果存在偏差。
-
-​	举个 ，假设在编译生成的机器码中，某些对象的生命周期在两个安全点之间，那么 :live 选项将无法探知到这些对象。
-
-​	另外，如果某个线程长时间无法跑到安全点，jmap将一直等待下去。与前面讲的jstat则不同，垃圾回收器会主动将jstat所需要的摘要数据保存至固定位置之中，而jstat只需直接读取即可。
-
-### 2.6、jhat：JDK自带堆分析工具
-
-<span style="color:blue;font-weight:bold;">基本情况</span>
-
-jhat（JVM Heap Analysis Tool）：
-
-Sun JDK提供的jhat命令与jmap命令搭配使用，用于分析jmap生成的heap dump文件（堆转储快照）。jhat内置了一个微型的HTTP/HTML服务器，生成dump文件的分析结果后，用户可以在浏览器中查看分析结果（分析虚拟机转储快照信息）。
-
-使用了jhat命令，就启动了一个http服务，端口是 7000 ， 即 http://localhost:7000/ 就可以在浏览器里分析。
-
-说明：jhat命令在JDK9、JDK10中已经被删除，官方建议用VisualVM代替。
-
-打开浏览器后，在Object Query Language(OQL) query页面，甚至可以用sql：
-
-```sql
-select s from java.lang.String s where s.value.length > 1000
-```
-
-<span style="color:blue;font-weight:bold;">基本语法</span>
-
-它的基本使用语法为：
-
-```bash
-jhat [-stack <bool>] [-refs <bool>] [-port <port>] [-baseline <file>] [-debug <int>] [-version] [-h|-help] <file>
-```
-
-选项option可以由以下值构成。
-
-- option参数
-  - -stack false|true ： 关闭|打开对象分配调用栈跟踪
-  - -refs false|true ： 关闭|打开对象引用跟踪
-  - -port port-number ： 设置jhat HTTP Server的端口号，默认7000
-  - -exclude exclude-file ： 执行对象查询时需要排除的数据成员
-  - -baseline exclude-file ： 指定一个基准堆转储
-  - -debug int ： 设置debug级别
-  - -version ： 启动后显示版本信息就退出
-  - -J <flag> ： 传入启动参数，比如 -J -Xmx512m
-
-<span style="color:blue;font-weight:bold;">基本用法</span>
-
-```bash
-$ jhat 1.hprof
-```
-
-
-
-### 2.7、jstack：打印JVM中线程快照
-
-<span style="color:blue;font-weight:bold;">基本情况</span>
-
-jstack（JVM Stack Trace）：用于生成虚拟机指定进程当前时刻的线程快照（虚拟机堆栈跟踪）。线程快照就是当前虚拟机内指定进程的每一条线程正在执行的方法堆栈的集合。
-
-生成线程快照的作用：可用于定位线程出现长时间停顿的原因，如线程间死锁、死循环、请求外部资源导致的长时间等待等问题。这些都是导致线程长时间停顿的常见原因。当线程出现停顿时，就可以用jstack显示各个线程调用的堆栈情况。
-
-官方帮助文档：https://docs.oracle.com/en/java/javase/11/tools/jstack.html
-
-在thread dump中，要留意下面几种状态：
-
-- <span style="color:red;font-weight:bold;">死锁，Deadlock（重点关注）</span>
-- <span style="color:red;font-weight:bold;">等待资源，Waiting on condition（重点关注）</span>
-- <span style="color:red;font-weight:bold;">等待获取监视器，Waiting on monitor entry（重点关注）</span>
-- <span style="color:red;font-weight:bold;">阻塞，Blocked（重点关注）</span>
-- 执行中，Runnable
-- 暂停，Suspened
-- 对象等待中，Object.wait() 或 TIMED_WAITING
-- 停止，Parked
-
-<span style="color:blue;font-weight:bold;">基本语法</span>
-
-它的基本使用语法为：
-
-```bash
-jstack [option] <pid>
-```
-
-jstack管理远程进程的话，需要在远程程序的启动参数中增加：
-
--Djava.rmi.server.hostname=......
-
--Dcom.sun.management.jmxremote
-
--Dcom.sun.management.jmxremote.port=8888
-
--Dcom.sun.management.jmxremote.authenticate=false
-
--Dcom.sun.management.jmxremote.ssl=false
-
-
-
-选项option可以由以下值构成。
-
-- option参数
-  - -F ： 当正常输出的请求不被响应时，强制输出线程堆栈。
-  - <span style="color:red;font-weight:bold;">-l ： 除堆栈外，显示关于锁的附加信息。</span>
-  - -m ： 如果调用到本地方法的话，可以显示C/C++的堆栈。
-  - -h ： 帮助操作
-
-
-
-<span style="color:blue;font-weight:bold;">基本用法</span>
-
-```bash
-$ jstack -l 16620
-```
-
-
-
-### 2.8、jcmd：多功能命令行
-
-<span style="color:blue;font-weight:bold;">基本情况</span>
-
-在JDK1.7以后，新增了一个命令行工具jcmd。
-
-它是一个多功能的工具，可以用来实现前面除了jstat之外所有命令的功能。比如：用它来导出堆、内存使用、查看Java进程、导出线程信息、执行GC、JVM运行时间等。
-
-官方帮助文档：https://docs.oracle.com/en/java/javase/11/tools/jcmd.html
-
-jcmd拥有jmap的大部分功能，并且在Oracle的官方网站上也推荐使用jcmd命令替代jmap命令。
-
-<span style="color:blue;font-weight:bold;">基本语法</span>
-
-它的基本使用语法为：
-
-```bash
-jcmd <pid | main class> <command ...|PerfCounter.print|-f file>
-```
-
-- jcmd -l ： 列出所有的JVM进程
-
-- jcmd pid help ： 针对指定的进程，列出支持的所有命令
-
-  ```bash
-  $ jcmd 9212 help
-  9212:
-  The following commands are available:
-  JFR.stop
-  JFR.start
-  JFR.dump
-  JFR.check
-  VM.native_memory
-  VM.check_commercial_features
-  VM.unlock_commercial_features
-  ManagementAgent.stop
-  ManagementAgent.start_local
-  ManagementAgent.start
-  GC.rotate_log
-  Thread.print
-  GC.class_stats
-  GC.class_histogram
-  GC.heap_dump
-  GC.run_finalization
-  GC.run
-  VM.uptime
-  VM.flags
-  VM.system_properties
-  VM.command_line
-  VM.version
-  help
-  ```
-
-- jcmd pid 具体命令 ： 显示指定进程的指令命令的数据
-
-<span style="color:blue;font-weight:bold;">基本用法</span>
-
-```bash
-$ jcmd
-$ jcmd -l
-$ jcmd 9232 help
-```
-
-
-
-### 2.9、jstatd：远程主机信息收集
-
-<span style="color:blue;font-weight:bold;">基本情况</span>
-
-​	之前的指令只涉及到监控本机的Java应用程序，而在这些工具中，一些监控工具也支持堆远程计算机的监控（如jps、jstat）。为了启用远程监控，则需要配合使用jstatd工具。
-
-​	命令jstatd是一个RMI服务端程序，它的作用相当于代理服务器，建立本地计算机与远程监控工具的通信。jstatd服务器将本机的Java应用程序信息传递到远程计算机。
-
-
-
-![image-20241011090401040](images/image-20241011090401040.png)
-
-<span style="color:blue;font-weight:bold;">基本语法</span>
-
-它的基本使用语法为：
-
-```bash
-jstatd [-nr] [-p port] [-n rminame]
-```
-
-选项option可以由以下值构成。
-
-- option参数：
-  - -nr ： 当一个存在的RMI Registry没有找到时，不尝试创建一个内部的RMI Registry
-  - -p port ： 端口号，默认为1099
-  - -n rminame ： 默认为JStatRemoteHost；如果多个jstatd服务开始在同一台主机上，rminame唯一确定一个jstatd服务
-  - -J ： jvm选项
-
-## 3、JVM监控及诊断工具-GUI篇
-
-### 3.0、一些补充
-
-#### 3.0.1、再谈内存泄漏
-
-##### 内存泄漏的理解与分类
-
-<span style="background-color:#ffe400;font-weight:bold;">何为内存泄漏（memory leak）</span>
-
-![image-20241014130638011](images/image-20241014130638011.png)
-
-​	可达性分析算法来判断对象是否是不再使用的对象，本质都是判断一个对象是否还被引用。那么对于这种情况下，由于代码的实现不同就会出现很多种内存泄漏问题（让JVM误以为此对象还在引用中，无法回收，造成内存泄漏）。
-
-| 是否还被使用 | 是否还被需求 | 判断是否泄漏                                        |
-| ------------ | ------------ | --------------------------------------------------- |
-| 是           | 否           | <span style="color:red;font-weight:bold;">是</span> |
-| 否           | ---          | 否                                                  |
-| 是           | 是           | 否                                                  |
-
-<span style="color:red;font-weight:bold;">不应该被使用的对象，仍旧没有被回收，就是内存泄漏！</span>
-
-<span style="background-color:#ffe400;font-weight:bold;">内存泄漏（memory leank）的理解</span>
-
-<span style="color:red;font-weight:bold;">严格来说，</span><span style="color:blue;font-weight:bold;">只有对象不会再被程序用到了，但是GC又不能回收他们的情况，才叫内存泄漏。</span>
-
-但实际情况很多时候一些不太好的时间（或疏忽）会导致对象的生命周期变得很长甚至导致OOM，也可以叫做<span style="color:red;font-weight:bold;">宽泛意义上的“内存泄漏”</span>。
-
-举例说明：
-
-![image-20241014131500678](images/image-20241014131500678.png)
-
-对象X引用对象Y，X的生命周期比Y的生命周期长；
-
-那么当Y生命周期结束的时候，X依然引用着Y，这时候，垃圾回收器是不会回收对象Y的。
-
-如果对象X还引用着生命周期比较短的A、B、C，对象A又引用着对象a、b、c、，这样就可能造成大量无用的对象不能被回收，进而占据了内存资源，造成内存泄漏，直到内存溢出。
-
-<span style="background-color:#ffe400;font-weight:bold;">内存泄漏与内存溢出的关系：</span>
-
-1. 内存泄漏（memory leak）
-
-申请了内存用完了不释放，比如一共有1024M的内存，分配了512M的内存一直不回收，那么可以用的内存只有512M了，仿佛泄漏掉了一部分；
-
-通俗的讲，内存泄漏就是【占着茅坑不拉屎】。
-
-2. 内存溢出（out of memory）
-
-申请内存时，没有足够的内存可以使用；
-
-通俗的讲，一个厕所就三个坑，有两个站着茅坑不走的（内存泄漏），剩下最后一个坑，厕所表示接待压力很大，这时候一下子来了两个人，茅坑（内存）就不够了，内存泄漏就演变成了内存溢出了。
-
-可见，内存泄漏和内存溢出的关系：内存泄漏的增多，最终会导致内存溢出。
-
-<span style="background-color:#ffe400;font-weight:bold;">泄漏的分类</span>
-
-- 经常发生：发生内存泄漏的代码会被多次执行，每次执行，泄漏一块内存；
-- 偶然发生：在某些特定情况下才会发生；
-- 一次性：发生内存泄漏的方法只会执行一次；
-- 隐式泄漏：一直占着内存不释放，直到执行结束；严格的说这个不算内存泄漏，因为最终释放掉了，但是如果执行时间特别长，也可能会导致内存耗尽。
-
-##### Java中内存泄漏的8种情况
-
-<span style="color:blue;font-weight:bold;">1-静态集合类</span>
-
-​	静态集合类，如HashMap、LinkedList等等。如果这些容器为静态的，那么它们的生命周期与JVM程序一致，则容器中的对象在程序结束之前将不能被释放，从而造成内存泄漏。简单而言，长生命周期的对象持有短生命周期对象的引用，尽管短生命周期的对象不再使用，但是因为长生命周期对象持有它的引用而导致不能被回收。
-
-```java
-public class MemoryLeak {
-    static List list = new ArrayList();
-    
-    public void oomTests() {
-        Object obj = new Object();
-        list.add(obj);
-    }
-}
-```
-
-
-
-<span style="color:blue;font-weight:bold;">2-单例模式</span>
-
-​	单例模式，和静态集合导致内存泄漏的原因类似，因为单例的静态特性，它的生命周期和JVM的生命周期一样长，所以如果单例对象持有外部对象的引用，那么这个外部对象也不会被回收，那么就会造成内存泄漏。
-
-<span style="color:blue;font-weight:bold;">3-内部类持有外部类</span>
-
-​	内部类持有外部类，如果一个外部类的实例对象的方法返回了一个内部类的实例对象。这个内部类对象被长期引用了，即使那个外部类实例对象不再被使用，但由于内部类持有外部类的实例对象，这个外部类对象将不会被垃圾回收，这也会造成内存泄漏。
-
-```java
-public class TestActivity extends Activity {
-    private static final Object key = new Object();
-    
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-        
-        new Thread() { // 匿名线程
-            public void run() {
-                synchronized(key) {
-                    try {
-                        key.wait();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-    }
-}
-```
-
-<span style="color:blue;font-weight:bold;">4-各种连接，如数据库连接、网络连接和IOI连接等</span>
-
-各种连接，如数据库连接、网络连接和IO连接等。
-
-​	在堆数据库进行操作的过程中，首先需要建立与数据库的连接，当不再使用时，需要调用close方法来释放与数据库的连接。只有连接被关闭后，垃圾回收器才会回收对应的对象。
-
-​	否则，如果在访问数据库的过程中，对Connection、Statement或ResultSet不显式地关闭，将会造成大量的对象无法被回收，从而引起内存泄漏。
-
-<span style="color:blue;font-weight:bold;">5-变量不合理的作用域</span>
-
-​	变量不合理的作用域。一般而言，一个变量定义的作用范围大于其使用范围，很有可能会造成内存泄漏。另一方面，如果没有及时地把对象设置为null，很有可能导致内存泄漏的发生。
-
-```java
-public class UsingRandom {
-    private String msg;
-    public void receiveMsg() {
-        readFromNet(); // 从网络中接受数据保存到msg中
-        saveDB(); // 把msg保存到数据库中
-    }
-}
-```
-
-​	如上面这个伪代码，通过readFromNet方法把接受的消息保存在变量msg中，然后调用saveDB方法把msg的内容保存到数据库中，此时msg已经就没用了，由于msg的生命周期与对象的生命周期相同，此时msg还不能回收，因此造成了内存泄漏。
-
-​	实际上这个msg变量可以放在receiveMsg方法内部，当方法使用完，那么msg的生命周期也就结束，此时就可以回收了。还有一种方法，在使用完msg后，把msg设置为null，这样垃圾回收期也会回收msg的内存空间。
-
-<span style="color:blue;font-weight:bold;">6-改变哈希值</span>
-
-改变哈希值，当一个对象被存储进HashSet集合中以后，就不能修改这个对象中的那些参与计算哈希值的字段了。
-
-否则，对象修改后的哈希值与最初存储进HashSet集合中时的哈希值就不同了，在这种情况下，即使在contains方法使用该对象的当前引用作为的参数去HashSet集合中检索对象，也将返回找不到对象的结果，这也会导致无法从HashSet集合中单独删除当前对象，造成内存泄漏。
-
-这也是String为什么被设置成了不可变类型，我们可以放心地把String存入HashSet，或者把String当做HashMap的key值。
-
-当我们想把自定义的类保存到散列表的时候，需要保证对象的hashCode不可变。
-
-<span style="color:blue;font-weight:bold;">7-缓存泄漏</span>
-
-​	内存泄漏的另一个常见来源是缓存，一旦你把对象引用放入到缓存中，他就很容易遗忘。比如：之前项目在一次上线的时候，应用启动奇慢直到夯死，就是因为代码中会加载一个表中的数据到缓存（内存）中，测试环境只有几百条数据，但是生产环境有几百万的数据。
-
-​	对于这个问题，可以使用WeakHashMap代表缓存，此种Map的特点是，当除了自身有对key的引用外，此key没有其他引用那么此Map会自动丢弃此值。
-
-![image-20241015124329935](images/image-20241015124329935.png)
-
-​	上面代码和图示主要演示WeakHashMap如何自动释放缓存对象，当init函数执行完成后，局部变量字符串引用weakd1,weakd2,d1,d2都会消失，此时只有静态map中保存对字符串对象的引用，可以看到，调用gc之后，HashMap的没有被回收，而WeakHashMap里面的缓存被回收了。
-
-<span style="color:blue;font-weight:bold;">8-监听器和回调</span>
-
-​	内存泄漏另一个常见来源是监听器和其他回调，如果客户端在你实现的API中注册回调，却没有显式的取消，那么就会聚集。
-
-​	需要确保回调立即被当作垃圾回收的最佳方法是只保存它的弱引用，例如将他们保存成为WeakHashMap中的键。
-
-
-
-##### 2个内存泄漏示例
-
-<span style="color:blue;font-weight:bold;">示例1</span>
-
-```java
-public class Stack {
-
-    private Object[] elements;
-    private int size = 0;
-    private static final int DEFAULT_INITIAL_CAPACITY = 16;
-
-    public Stack() {
-        elements = new Object[DEFAULT_INITIAL_CAPACITY];
-    }
-
-    public void push(Object e) { // 入栈
-        ensureCapacity();
-        elements[size++] = e;
-    }
-
-
-    // 存在内存泄漏
-//    public Object pop() { // 出栈
-//        if (size == 0) {
-//            throw new EmptyStackException();
-//        }
-//        return elements[--size];
-//    }
-
-    public Object pop() { // 出栈
-        if (size == 0) {
-            throw new EmptyStackException();
-        }
-        Object result = elements[--size];
-        elements[size] = null;
-        return result;
-    }
-
-    private void ensureCapacity() {
-        if (elements.length == size) {
-            elements = Arrays.copyOf(elements, 2 * size + 1);
-        }
-    }
-}
-```
-
-<span style="color:blue;font-weight:bold;">示例2</span>
-
-```java
-public static void main(String[] args) {
-    try {
-        Connection conn = null;
-        Class.forName("com.mysql.jdbc.Driver");
-        conn = DriverManager.getConnection("url", "", "");
-        Statement stmt = conn.createStatement();
-        ResultSet rs = stmt.executeQuery("......");
-    } catch (Exception e) { // 异常日志
-        
-    } finally {
-        // 1、关闭生命的对象 ResultSet
-        // 2、关闭结果集 Statement
-        // 3、关闭连接 Connection
-    }
-}
-```
-
-
-
-#### 3.0.2、支持使用OQL语言查询对象信息
-
-##### SELECT子句
-
-在MAT中，Select子句的格式与SQL基本一致，用于指定要显示的列。Select子句中可以使用“*”，查看结果对象的引用实例（相当于outgoing references）。
-
-```
-select * from java.util.Vector v
-```
-
-使用“OBJECTS”关键字，可以将返回结果集中的项以对象的形式显示。
-
-```
-select objects v.elementData from java.util.Vector v
-select OBJECTS s.value FROM java.lang.String s
-```
-
-在Select子句中，使用“AS RETAINED SET”关键字可以得到所得对象的保留集。
-
-```
-select as retained set * from com.coding.jvm07.gui.Picture
-```
-
-“DISTINCT”关键字用于在结果集中去除重复对象。
-
-```
-select distinct OBJECTS classof(s) from java.lang.String s
-```
-
-##### FROM子句
-
-From子句用于指定查询范围，它可以指定类名、正则表达式或者对象地址。
-
-```
-select * from java.lang.String s
-```
-
-下例使用正则表达式，限定搜索范围，输出所有com.coding包下所有类的实例。
-
-```
-select * from "com\.coding\..**"
-```
-
-也可以直接使用类的地址进行搜索。使用类的地址的好处是可以区分被不同ClassLoader加载的同一种类型。
-
-```
-select * from 0xf3800420
-```
-
-##### WHERE子句
-
-Where子句用于指定OQL的查询条件。OQL查询将只返回满足Where子句指定条件的对象。Where子句的格式与传统SQL极为相似。
-
-下例返回长度大于10的char数组。
-
-```
-select * from char[] s where s.@length>10
-```
-
-下例返回包含“java”子字符串的所有字符串，使用“LIKE”操作符，“LIKE”操作符的操作参数为正则表达式。
-
-```
-select * from java.lang.String s where toString(s) LIKE ".*java.*"
-```
-
-下例返回所有value域不为null的字符串，使用“=”操作符。
-
-```
-select * from java.lang.String s where s.value!=null
-```
-
-Where子句支持多个条件的AND、OR运算。下例返回数组长度大于15，并且深堆大于1000字节的所有Vector对象。
-
-```
-select * from java.util.Vector v where v.elementData.@length>15 AND v.@retainedHeapSize>1000
-```
-
-##### 内置对象与方法
-
-OQL中可以访问堆内对象的属性，也可以访问堆内代理对象的属性。访问堆内对象的属性时。
-
-格式如下：
-
-> [<alias>.]<field>.<field>.<field>
->
-> 其中alias为对象名称
-
-访问java.io.File对象的path属性，并进一步访问path的value属性：
-
-```
-select toString(f.path.value) from java.io.File f
-```
-
-下例显示了String对象的内容、objectid和objectAddress。
-
-```
-select s.toString(), s.@objectId,  s.@objectAddress from java.lang.String s
-```
-
-下例显示java.util.Vector内部数组的长度。
-
-```
-select v.elementData.@length from java.util.Vector v
-```
-
-下例显示了所有的java.util.Vector对象及其子类型
-
-```
-select * from INSTANCEOF java.util.Vector
-```
-
-### 3.1、工具概述
-
-​	使用上一章命令行工具或组合能帮您获取目标Java应用性能相关的基础信息，但它们存在下列局限：
-
-1. 无法获取方法级别的分析数据，如方法间的调用关系、各方法的调用次数和调用时间等（这堆定位应用性能瓶颈至关重要）。
-2. 要求用户登录到目标Java应用所在的宿主机上，使用起来不是很方便。
-3. 分析数据通过终端输出，结果展示不够直观。
-
-​	为此，JDK提供了一些内存泄漏的分析工具，如jconsole、jvisualvm等，用于辅助开发人员定位问题，但是这些工具很多时候并不足以满足快速定位的需求。所以这里我们介绍的工具相对多一些、丰富一些。
-
-<span style="color:blue;font-weight:bold;">图形化综合诊断工具</span>
-
-- JDK自带的工具
-  - jconsole：JDK自带的可视化监控工具。查看Java应用程序的运行概况、监控堆信息、永久区（或元空间）使用情况、类加载情况等。
-    - 位置：jdk\bin\jconsole.exe
-  - Visual VM：Visual VM是一个工具，它提供了一个可视界面，用于查看Java虚拟机上运行的基于Java技术的应用程序的详细信息。
-    - wei只：jdk\bin\jvisualvm.exe
-  - JMC：Java Mission Control，内置Java Flight Recorder。能够以极低的性能开销收集Java虚拟机的性能数据。
-- 第三方工具
-  - MAT：MAT（Memory Analyzer Tool）是基于Eclipse的内存分析工具，是一个快速、功能丰富的Java Heap分析工具，它可以帮助我们查找内存泄漏和减少内存消耗。
-    - Eclipse的插件形式
-
-  - JProfile：商业软件，需要付费。功能强大。
-    - 与VisualVM类似
-
-  - Arthas：Alibaba开源的Java诊断工具。深受开发者喜爱。
-  - Btrace：Java运行时追踪工具。可以在不停机的情况下，跟踪指定的方法调用、构造含税调用和系统内存等信息。
-
-
-### 3.2、jConsole
-
-<span style="color:blue;font-weight:bold;">基本概述</span>
-
-jconsole：
-
-- 从Java5开始，在JDK中自带的Java监控和管理控制台。
-- 用于对JVM中内存、线程和类等的监控，是一个基于JMX(java management extensions)的GUI性能监控工具。
-
-官方教程：https://docs.oracle.com/javase/7/docs/technotes/guides/management/jconsole.html
-
-<span style="color:blue;font-weight:bold;">启动</span>
-
-命令行下输入： jconsole即可
-
-```bash
-$ jconsole 
-```
-
-<span style="color:blue;font-weight:bold;">三种连接方式</span>
-
-- local ： 使用JConsole连接一个正在本地系统运行的JVM，并且执行程序的和运行JConsole的需要时另一个用户。JConsole使用文件系统的授权通过RMI连接器连接到平台的MBean服务上。这种从本地连接的监控能力只有Sun的JDK具有。
-- 使用下面的URL通过RMI连接器连接到一个JMX代理，service:jmx:rmi://jndi/rmi://hostName:portNum/jmxrmi。JConsole为建立连接。需要在环境变量中设置 mx.remote.credentials 来指定用户名和密码，从而进行授权。
-- Advanced：使用一个特殊的URL连接JMX代理。一般情况使用自己定制的连接器而不是RMI提供的连接器来连接JMX代理，或者是一个使用JDK1.4的实现了JMX和JMX Remote的应用。
-
-### 3.3、VisualVM【推荐：5颗星】
-
-<span style="color:blue;font-weight:bold;">基本概述</span>
-
-- Visual VM是一个功能强大的多合一故障诊断和性能监控的可视化工具。
-- 它集成了多个JDK命令工具，使用Visual VM可用于显示虚拟机进程及进程的配置和环境信息（jps、jinfo），监视应用程序的CPU、GC、堆、方法区及线程的信息（jstat、jstack）等，甚至代替JConsole。
-- 在JDK 6 Update 7以后，Visual VM便作为JDK的一部分发布（VisualVM在JDK/bin目录下），即：它完全免费。
-- 此外，Visual VM也可以作为独立的软件安装：
-
-首页：https://visualvm.github.io/index.html
-
-![image-20241011181210818](images/image-20241011181210818.png)
-
-
-<span style="color:blue;font-weight:bold;">插件的安装</span>
-- Visual VM的一大特点是支持插件扩展，并且插件安装非常方便。我们既可以通过离线下载插件文件 *.nbm，然后在Plugin对话框的已下载页面下，添加已下载的插件。也可以在可用插件页面下，在线安装插件。<span style="color:red;font-weight:bold;">这里建议安装上：VisualGC</span>
-
-<span style="color:orange;font-weight:bold;">如何为Java VisualVM安装插件？</span>
-
-插件地址：https://visualvm.github.io/pluginscenters.html 拷贝对应JDK版本的插件地址。
-
-比如：
-
-- 查看Java版本
-
-```bash
-$ java -version
-java version "1.8.0_91"
-Java(TM) SE Runtime Environment (build 1.8.0_91-b15)
-Java HotSpot(TM) 64-Bit Server VM (build 25.91-b15, mixed mode)
-```
-
-- 找到对应版本的插件地址
-
-得到JDK 8 Update 40 - 121（包含了版本1.8.0_91）的地址，点击后打开页面 https://visualvm.github.io/archive/uc/8u40/updates.html 上寻找到：
-
-Catalog URL:	https://visualvm.github.io/archive/uc/8u40/updates.xml.gz
-
-打开 `jvisualvm` -> 【工具】 -> 【插件】 -> 【设置】 -> 【编辑】 -> 粘贴拷贝的地址，结果如下：
-
-![image-20220522155255976](images/image-20220522155255976.png)
-
-配置之后，点击【可用插件】面板，选择Visual GC 和 BTrace Workbench插件。
-
-其他插件类似。
-
-<span style="color:orange;font-weight:bold;">如何为IDE集成VisualVM插件？</span>
-
-- IDEA安装VisualVM Launcher插件即可。
-
-<span style="color:blue;font-weight:bold;">连接方式</span>
-
-- 本地连接
-  - 监控本地Java进程的CPU、类、线程等
-- 远程连接
-  1. 确定远程服务器的ip地址
-  2. 添加JMX（通过JMX技术具体监控远端服务器哪个Java进程）
-  3. 修改bin/catalina.sh文件，连接远程的tomcat
-  4. 在 .../conf 中添加 jmxremote.access 和 jmxremote.password 文件
-  5. 将服务器地址改为公网ip地址
-  6. 设置阿里云安全策略和防火墙策略
-  7. 启动tomcat，查看tomcat启动日志和端口监听
-  8. JMX中输入端口号、用户名、密码登录。
-
-<span style="color:blue;font-weight:bold;">主要功能</span>
-
-1. 生成/读取堆内存快照
-2. 查看JVM参数和系统属性
-3. 查看运行中的虚拟机进程
-4. 生成/读取线程快照
-5. 程序资源的实时监控
-6. 其他功能
-   1. JMX代理连接
-   2. 远程环境监控
-   3. CPU分析和内存分析
-
-### 3.4、eclipse MAT
-
-<span style="color:blue;font-weight:bold;">基本概述</span>
-
-MAT（Memory Analyzer Tool）工具是一款功能强大的Java堆内存分析器。可以用于查找内存泄漏以及查看内存消耗情况。
-
-MAT是基于Eclipse开发的，不仅可以单独使用，还可以作为插件的形式嵌入在Eclipse中使用。是一款免费的性能分析工具，使用起来非常方便。大家可以在 https://www.eclipse.org/mat/downloads.php 下载并使用MAT。
-
-![image-20241012085225669](images/image-20241012085225669.png)
-
-| MAT版本                        | JDK版本 |
-| ------------------------------ | ------- |
-| MemoryAnalyzer-1.15.0.20231206 | 17+     |
-| MemoryAnalyzer-1.14.0.20230315 | 17+     |
-| MemoryAnalyzer-1.13.0.20220615 | 11+     |
-| MemoryAnalyzer-1.12.0.20210602 | 11+     |
-| MemoryAnalyzer-1.11.0.20201202 | 1.8+    |
-
-- 只要确保机器上装有JDK并配置好相关的环境变量，MAT可正常启动。
-- 还可以在Eclipse中以插件的方式安装：
-
-![image-20241012085631560](images/image-20241012085631560.png)
-
-## [启动MemoryAnalyzer报错 Could not create the Java Virtual Machine](https://www.cnblogs.com/hong0632/p/8677853.html)
-
-删除 `C:\ProgramData\Oracle\Java\javapath\` 下的java.exe、javaw.exe、javaws.exe这三个文件。
-
-<span style="color:blue;font-weight:bold;">获取堆dump文件</span>
-
-<span style="color:orange;font-weight:bold;">dump文件都有哪些内容？</span>
-
-MAT可以分析heap dump文件。在进行内存分析时，只要获得了反映当前设备内存映像的hprof文件，通过MAT打开就可以直观地看到当前的内存信息。
-
-一般说来，这些内存信息包含：
-
-- 所有的对象信息，包括对象实例、成员变量、存储于栈中的基本类型值和存储于堆中的其他对象的引用值。
-- 所有的类信息，包括classloader、类名称、父类、静态变量等。
-- GCRoot到所有的这些对象的引用路径。
-- 线程信息，包括线程的调用栈及此线程的线程局部变量（LTS）。
-
-说明1：缺点
-
-​	MAT不是一个万能工具，它并不能处理所有类型的堆存储文件。但是比较主流的厂家和格式，例如Sun，HP，SAP所采用的HPROF二进制堆存储文件，以及IBM的PHD堆存储文件等都能被很好的解析。
-
-说明2：
-
-​	最吸引人的还是能够快速为开发人员生成<span style="color:red;font-weight:bold;">内存泄漏报表</span>，方便定位问题和分析问题。虽然MAT有如此强大的功能，但是内存分析也没有简单到一键完成的程度，很多内存问题还是需要我们从MAT展现给我们的信息当中通过经验和直觉来判断才能发现。
-
-<span style="color:orange;font-weight:bold;">如何获取堆dump文件？</span>
-
-- 方式一：jmap命令
-
-```bash
-# 获得进程ID
-$ jps
-# 获得dump堆转储文件
-$ jmap -dump:live,format=b,file=C:\1.hprof <pid>
-```
-
-- 方式2：使用JVisualVM导出
-
-​	捕获的heap dump文件是一个临时文件，关闭JVisualVM后自动删除，若要保留，需要将其另存为文件。
-
-​	可通过以下方法捕获heap dump：
-
-​	左侧Application（应用程序）=>Monitor（监视）=>Heap Dump(堆Dump）=>在左侧生成的临时堆文件上右键另存为。
-
-​	本地应用程序的Heap dumps作为应用程序标签页的一个子标签页打开。同时，heap dump在左侧的Application（应用程序）栏中对应一个含有时间戳的节点。右击这个节点选择save as（另存为）即可将heap dump保存到本地。
-
-![image-20241012134618555](images/image-20241012134618555.png)
-
-
-
-- 方式三：使用JVM参数自动生成
-  - 选项 -XX:+HeapDumpOnOutOfMemoryError 或 -XX:+HeapDumpBeforeFullGC
-  - 选项 -XX:HeapDumpPath 所代表的含义就是当程序出现 OutofMemory 时，将会在相应的目录下生成一份dump文件。如果不指定选项 XX:HeapDumpPath 则在当前目录下生成dump文件。
-
-对比：考虑到生产环境中几乎不可能在线对其进行分析，大都是采用离线分析，因此使用jmap+MAT工具是最常见的组合。
-
-- 方式四：使用MAT既可以打开一个已有的堆快照，也可以通过MAT直接从活动Java程序中导出堆快照。该功能将借助jps列出当前正在运行的Java进程，以供选择并获取快照。
-
-![image-20241012133344251](images/image-20241012133344251.png)
-
-<span style="color:blue;font-weight:bold;">分析堆dump文件</span>
-
-![image-20241013165036176](images/image-20241013165036176.png)
-
-![image-20241013171636001](images/image-20241013171636001.png)
-
-- Histogram ： 直方图中有如下列
-
-  - Shallow Heap ： 浅堆
-
-    浅堆（Shallow Heap）是直一个对象所消耗的内存。在32位系统中，一个对象引用会占据4个字节，一个int类型会占据4个字节，long类型变量会占用8个字节，每个对象头需要占用8个字节。根据堆快照格式不同，对象的大小可能会项8字节进行对齐。
-
-    以String为例：2个int值共占8字节，对象引用占用4字节，对象头8字节，合计20字节，向8字节对齐，故占用24字节。（jdk7中）
-
-    | 变量类型 | 变量名 | 变量值                    |
-    | -------- | ------ | ------------------------- |
-    | int      | hash32 | 0                         |
-    | int      | hash   | 0                         |
-    | ref      | value  | C:\Users\Administrator... |
-
-    这24字节为String对象的浅堆大小。它与String的value实际取值无关，无论字符串长度如何，浅堆大小始终是24字节。
-
-  - Retained Heap ： 深堆
-
-    <span style="background-color:#ffe400;font-weight:bold;">保留集（Retained Set）：</span>
-
-    对象A的保留集指当对象A被垃圾回收后，可以被释放的所有的对象集合（包括对象A本身），即对象A的保留集可以被认为是只能通过对象A被直接或间接访问到的所有对象的集合。通俗地说，就是指仅被对象A所持有的对象的集合。
-
-    <span style="background-color:#ffe400;font-weight:bold;">深堆（Retained Heap）：</span>
-
-    深堆是指对象的保留集中所有的对象的浅堆大小之和。
-
-    注意：浅堆指对象本身占用的内存，不包括其内部引用对象的大小。一个对象的深堆指只能通过该对象访问到的（直接或间接）所有对象的浅堆之和，即对象被回收后，可以释放的真实空间。
-
-  - 对象实际大小
-
-    另外一个常用的概念是对象的实际大小。这里，对象的实际大小定义为一个对象<span style="color:red;font-weight:bold;">所能触及的</span>所有对象的浅堆大小之和，也就是通常意义上我们说的对象大小。与深堆相比，似乎这个在日常开发中更为直观和被人接受，<span style="color:red;font-weight:bold;">但实际上，这个概念和垃圾回收无关。</span>
-
-    下图显示了一个简单的对象引用关系图，对象A引用了C和D，对象B引用了C和E。那么对象A的浅堆大小只是A本身，不含C和D，而A的实际大小为A、C、D三者之和。而A的深堆大小为A与D之和，由于对象C还可以通过对象B访问到，因此不在对象A的深堆范围内。
-
-    ![image-20241013211805445](images/image-20241013211805445.png)
-
-- thread_overview ： 线程概述中，对任一对象右键，可以得到
-
-  假设对象A和对象B持有对象C的引用；对象C持有对象D和对象E的引用。
-
-  - List Objects
-    - with outgoing references ： 对象C引用的所有对象都称为 outgoing references。比如：D和E对象。表示，查看C引用了那些对象。
-      - C=>D
-      - C=>E
-    - with incoming references ： 拥有对象C的引用的所有对象都称为对象C的 incoming references。比如：A和B。表示，查看谁引用了C对象。
-      - A=>C
-      - B=>C
-  - Merge Shortest Paths to GC Roots ： 查看对象到GC Roots的最短路径
-    - 右键选择 exclude all phantom/wek/soft etc. references 选项
-  
-- dominator_tree 
-
-  支配树（Dominator Tree），支配树的概念源自图论。
-
-  MAT提供了一个称为支配树（Dominator Tree）的对象图。支配树体现了对象实例间的支配关系。在对象引用图中，所有指向对象B的路径都经过对象A，则认为<span style="color:red;font-weight:bold;">对象A支配对象B</span>。如果对象A是离对象B最近的一个支配对象，则认为对象A为对象B的<span style="color:red;font-weight:bold;">直接支配者</span>。支配树是基于对象间的引用图所建立的，它由一下基本性质：
-
-  - 对象A的子树（所有被对象A支配的对象集合）表示对象A的保留集（retained set），即深堆。
-
-  - 如果对象A支配对象B，那么对象A的直接支配者也支配对象B。
-
-  - 支配树的边与对象引用图的边不直接对应。
-
-    如下图所示：左图表示对象引用图，右图表示左图所对应的支配树。
-
-  ![image-20241014085937193](images/image-20241014085937193.png)
-
-  ​	对象A和B由根对象直接支配，由于在到对象C的路径中，可以经过A，也可以经过对象B，因此对象C的直接支配者也是根对象。
-
-  ​	对象F与对象D相互引用，因为到对象F的所有路径必然经过对象D，因此，对象D是对象F的直接支配者。而到对象D的所有路径中，必然经过对象C，即使是从对象F到对象D的引用，从根节点出发，也是经过对象C的，所以，对象D的直接支配者为对象C。
-
-  ​	同理，对象E支配对象G。到达对象H的可以通过对象D，也可以通过对象E，因此对象D和E都不能支配对象H，而经过对象C既可以到达D也可以到达E，因此对象C为对象H的直接支配者。
-
-​		在MAT中，单击工具栏上的对象支配树按钮，可以打开对象支配树视图。
-
-​		![image-20241014090259058](images/image-20241014090259058.png)
-
-### 3.5、JProfiler【推荐：5颗星】
-
-<span style="color:blue;font-weight:bold;">基本概述</span>
-
-- 介绍
-
-​	在运行Java的时候有时候想测试运行时占用内存情况，这时候就需要使用测试工具查看了。在eclipse里面有Eclipse Memory Analyzer tool(MAT)插件可以测试，而在IDEA中也有这么一个差距，就是 JProfiler。
-
-​	JProfiler是由ej-technologies公司开发的一款Java应用性能诊断工具。功能强大，但是收费。
-
-​	官网下载地址：https://www.ej-technologies.com/products/jprofiler/overview.html
-
-- 特点
-
-  - 使用方便、界面操作友好（简单且强大）
-  - 对被分析的应用影响小（提供模板）
-  - CPU，Thread，Memory分析功能尤其强大
-  - 支持对jdbc、noSql、jsp、servlet、socket等进行分析
-  - 支持多种模式（离线，在线）的分析
-  - 支持监控本地、远程的JVM
-  - 跨平台，拥有多种操作系统的安装版本
-
-  ![image-20241016211513221](images/image-20241016211513221.png)
-
-- 主要功能
-  - 方法调用：对方法调用的分析可以帮助你了解应用程序正在做什么，并找到提高其性能的方法。
-  - 内存分配：通过分析堆上对象、引用链和垃圾收集能帮您修复内存泄漏问题，优化内存使用。
-  - 线程和锁：JProfile提供多种针对线程和锁的分析试图帮助您发现多线程问题。
-  - 高级子系统：许多性能问题都发生在更高的语义级别上。例如，对于JDBC调用，您可能希望找出执行最慢的SQL语句。JProfile支持对这些子系统进行集成分析。
-
-
-
-<span style="color:blue;font-weight:bold;">安装与配置</span>
-
-略
-
-<span style="color:blue;font-weight:bold;">具体使用</span>
-
-<span style="color:orange;font-weight:bold;">数据采集方式</span>
-
-JProfile数据采集方式分为两种：Sampling（样本采集）和Instrumentation（重构模式）
-
-- Instrumentation：这是JProfile全功能模式。在class加载之前，JProfiler把相关功能代码写入到需要分析的class的bytecode中，对正在运行的jvm有一定影响。
-  - 优点：功能强大。在此设置中，调用堆栈信息是准确的。
-  - 缺点：若要分析的class较多，则对应用的性能影响较大，CPU开销可能很高（取决于Filter的控制）。因此使用此模式一般配合Filter使用，只对特定的类或包进行分析。
-
-- Sampling：类似于样本统计，每隔一定时间（5ms）将每个线程栈中方法栈中的信息统计出来。
-  - 优点：对CPU的开销非常低，对应用影响小（即使你不配置任何Filter）
-  - 缺点：一些数据/特性不能提供（例如：方法的调用次数、执行时间）
-
-注：JProfiler本身没有指出数据的采集类型，这里的采集类型是针对方法调用的采集类型。因为JProfiler的绝大多数核心功能都依赖方法调用采集的数据，所以可以直接认为是JProfiler的数据采集类型。
-
-<span style="color:orange;font-weight:bold;">遥感检查（Telemetries）</span>
-
-- 整体视图 Overview：显示堆内存、GC、类、线程以及CPU等活动视图。
-- 内存 Memory：显示一张关于内存变化的活动时间表。
-- 记录的对象 Recorded Objects：显示一张关于活动对象与数组的图表的活动时间表。
-- 记录吞吐量 Record Throughput：显示一段时间累计的JVM生产和释放的活动时间表。
-- 垃圾回收活动 GC Activity：显示一张关于垃圾回收活动的活动时间表。
-- 类 Classes：显示一个与已装载类的图表的活动时间表。
-- 线程 Threads：显示一个与动态线程图表的活动时间表。
-- CPU负载 CPU Load：显示一段时间中CPU的负载图表。
-
-
-
-<span style="color:orange;font-weight:bold;">内存视图（Live Memory）</span>
-
-Live Memory 内存剖析：class/class instance的相关信息。例如对象的个数，大小，对象创建的方法执行栈，对象创建的热点。
-
-- 所有对象 All Objects
-
-显示所有加载的类的列表和在堆上分配的实例数。只有Java 1.5（JVMTI）才会显示此视图。
-
-![image-20241018124516387](images/image-20241018124516387.png)
-
-- 记录对象 Record Objects
-
-查看特定时间段对象的分配，并记录分配的调用堆栈。
-
-- 分配访问树 Allocation Call Tree
-
-显示一颗请求树或者方法、类、包或对已选择类有带注释的分配信息的J2EE组件。
-
-- 分配热点 Allocation Hot Spots
-
-显示一个列表，包括方法、类、包或者分配已选类的J2EE组件。你可以标注当前值并且显示差异值。对于每个热点都可以显示它的跟踪记录树。
-
-- 类追踪器 Class Tracker
-
-类跟踪视图可以包含任意数量的图表，显示选定的类和包的实例与时间。
-
-
-
-分析：内存中的对象的情况：
-
-- 频繁创建的Java对象：死循环、循环次数过多
-- 存在大的对象：读取文件时，byte[]应该边读边写。==>长时间不写出的话，导致byte[]过大。
-- 存在内存泄漏
-
-
-
-<span style="color:orange;font-weight:bold;">堆遍历（Heap Walker）</span>
-
-- 类 Classes：显示所有类和它们的实例，可以右击具体的类 “Used Selected Instance”实现进一步跟踪。
-- 分配 Allocations：为所有记录对象显示分配树和分配热点。
-- 索引 References：为单个对象和“显示到垃圾回收根目录的路径”提供索引图的显式功能。还能提供合并输入视图与输出视图的功能。
-- 时间 Time：显示一个对已记录对象的解决时间的柱状图。
-- 检查 Inspections：显示了一个数量的操作，将分析当前对象集在某种条件下的子集，实质是一个筛选的过程。
-- 图表 Graph：你需要在references视图和biggest视图手动添加对象到图表，它可以显示对象的传入和传出引用，能方便的找到垃圾收集器根源。
-
-PS：在工具栏点击“Go To Start”可以使堆内存重新计数，也就是回到初始状态。
-
-<span style="color:orange;font-weight:bold;">CPU视图（Cpu Views）</span>
-
-​	JProfiler提供不同的方法来记录访问树以优化性能和细节。线程或者线程组以及线程状况可以被所有的视图选择。所有的视图都可以聚集到方法、类、包或J2EE组件等不同层上。
-
-- 访问树 Call Tree
-
-显示一个积累的自顶向下的树，树中包含所有在JVM中已记录的访问队列。JDBC，JMS和JNDI服务请求都被注释在请求树中。请求树可以根据Servlet和JSP堆URL的不同需要进行拆分。
-
-- 热点 Hot Spots
-
-​	显示消耗时间最多的方法的列表。对每个热点都能够显示回溯树。该热点可以按照方法请求，JDBC，JMS和JNDI服务请求以及按照URL请求来进行计算。
-
-- 访问图 Call Graph
-
-显示一个从已选方法、类、包或J2EE组件开始的访问队列的图。
-
-- 方法统计 Method Statistics
-
-显示一段时间内记录的方法的调用时间细节。
-
-<span style="color:orange;font-weight:bold;">线程视图（Threads）</span>
-
-JProfiler通过堆线程历史的监控判断其运行状态，并监控是否有现成阻塞的产生，还能将一个线程所管理的方法以树状形式呈现。对线程剖析。
-
-- 线程历史 Thread History
-
-显式一个与线程活动和线程状态在一起的活动时间表。
-
-- 线程监控 Thread Monitor
-
-显示一个列表，包括所有的活动线程以及它们目前的活动状况。
-
-- 线程转储 Thread Dumps
-
-显示所有线程的堆栈跟踪。
-
-
-
-线程分析主要关心三个方面：
-
-1. Web容器的线程最大数。比如：Tomcat的线程容量应该略大于最大并发数。
-2. 线程阻塞
-3. 线程死锁
-
-<span style="color:orange;font-weight:bold;">监视器&锁（Monitor&Locks）</span>
-
-所有线程持有锁的情况以及锁的信息。
-
-观察JVM的内部线程并查看状态：
-
-- 死锁探测图表 Current Locking Graph：显示JVM中的当前死锁图表。
-- 目前使用的监测器 Current Monitors：显示目前使用的监测器并且包括它们的关联线程。
-- 锁定历史图表 Locking History Graph：显示记录在JVM中的锁定历史。
-- 历史检测记录 Monitor History：显示重大的等待事件和阻塞事件的历史记录。
-- 监控器使用统计 Monitor Usage Statistics：显示分组监测，线程和监测类的统计监测数据。
 
 ### 3.6、Arthas【推荐：5颗星】
 
