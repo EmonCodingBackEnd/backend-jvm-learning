@@ -14277,7 +14277,7 @@ class Data {
 
 ​	Arthas是Alibaba开源的JVM诊断工具，深受开发者喜爱。开发者在线排查问题，无须项目重启，Arthas会动态跟踪Java程序，实时监控JVM状态。
 
-​	Arthas支持JDK 6+，支持Linux/Mac/Windows，采用命令行交互模式，同时提供丰富的Tab自动补全功能，进一步方便进行问题的定位和诊断。
+​	Arthas支持JDK 6+（4.x 版本不再支持 JDK 6 和 JDK 7），支持Linux/Mac/Windows，采用命令行交互模式，同时提供丰富的Tab自动补全功能，进一步方便进行问题的定位和诊断。
 
 ​	当各位读者遇到以下类似问题而束手无策时，Arthas可以帮助解决。这个类从哪个jar包加载的？为什么会报各种类相关的Exception？修改的代码为什么没有执行到？遇到问题无法在线上debug，难道只能通过加日志再重新发布吗？线上遇到某个用户的数据处理有问题，但线上同样无法debug，线下无法重现。是否有一个全局视角来查看系统的运行状况？有什么办法可以监控到JVM的实时运行状态？Arthas代码基于Greys二次开发而来，Arthas的命令行实现基于termd开发，文本渲染功能基于crash中的文本渲染功能开发，命令行界面基于vert.x提供的cli库进行开发，等等，集各家所长开发的一款工具。下面作者带大家一起走进Arthas。
 
@@ -14289,9 +14289,716 @@ class Data {
 
 ​	1、可以直接在Linux上通过wget或者curl命令下载，选择GitHub或者尝试国内的码云Gitee下载。
 
+```bash
+# GitHub下载
+% wget https://alibaba.github.io/arthas/arthas-boot.jar
+# Gitee下载
+% wget https://arthas.gitee.io/arthas-boot.jar
+# curl 下载
+% curl -O https://arthas.aliyun.com/arthas-boot.jar
+```
 
+​	2、可以在浏览器直接访问https://alibaba.github.io/arthas/arthas-boot.jar，等待下载成功后，上传到Linux服务器。
+
+
+
+#### 启动
+
+​	Arthas是一段Java程序打包成的jar包，所以下载完成以后可以直接用java –jar命令运行，如下所示。
+
+```bash
+% java -jar arthas-boot.jar 
+```
+
+#### 退出
+
+​	如果只是退出当前的连接，可以用`quit`或者`exit`命令。Attach 到目标进程上的 arthas 还会继续运行，端口会保持开放，下次连接时可以直接连接上。
+
+​	如果想完全退出 arthas，可以执行`stop`命令。
+
+#### 卸载
+
+- 在 Linux/Unix/Mac 平台
+
+```bash
+% rm -rf ~/.arthas/
+% rm -rf ~/logs/arthas
+```
+
+- Windows 平台直接删除 user home 下面的`.arthas`和`logs/arthas`目录
+
+#### Arthas工程目录
+
+​	Arthas工程目录如下表所示。
+
+​	Arthas的GitHub地址：https://github.com/alibaba/arthas
+
+<img src="images/image-20241212112256385.png" alt="image-20241212112256385" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">Arthas工程目录</div>
+
+<img src="images/image-20241212105852308.png" alt="image-20241212105852308" style="zoom:50%;" />
+
+#### 启动使用与Web Console
+
+​	在工作中可以使用java -jar命令启动Arthas，这里可以选择输入对应的Java进程PID，也就可以不输入对应的Java进程PID。执行成功后，Arthas提供了一种命令行方式的交互方式，Arthas会检测当前服务器上的Java进程，并将进程列表展示出来，用户输入对应的编号(1、2、3、4…)进行选择，然后按Enter键。
+
+​	方式1：不添加Java进程PID。
+
+```bash
+% java -jar arthas-boot.jar
+```
+
+​	运行结果如下。
+
+```bash
+[INFO] JAVA_HOME: /Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
+[INFO] arthas-boot version: 4.0.4
+[INFO] Found existing java process, please choose one and input the serial number of the process, eg : 1. Then hit ENTER.
+* [1]: 51234 com.intellij.idea.Main
+  [2]: 62292 org.jetbrains.jps.cmdline.Launcher
+  [3]: 853 
+  [4]: 81531 math-game.jar
+```
+
+​	选择编号，注意输入的是“[]”内编号，不是PID，这里选择编号4，出现如下图所示界面表示Arthas启动成功了。
+
+```bash
+4
+[INFO] arthas home: /Users/wenqiu/.arthas/lib/4.0.4/arthas
+[INFO] Try to attach process 81531
+Picked up JAVA_TOOL_OPTIONS: 
+[INFO] Attach process 81531 success.
+[INFO] arthas-client connect 127.0.0.1 3658
+  ,---.  ,------. ,--------.,--.  ,--.  ,---.   ,---.                           
+ /  O  \ |  .--. ''--.  .--'|  '--'  | /  O  \ '   .-'                          
+|  .-.  ||  '--'.'   |  |   |  .--.  ||  .-.  |`.  `-.                          
+|  | |  ||  |\  \    |  |   |  |  |  ||  | |  |.-'    |                         
+`--' `--'`--' '--'   `--'   `--'  `--'`--' `--'`-----'                          
+
+wiki       https://arthas.aliyun.com/doc                                        
+tutorials  https://arthas.aliyun.com/doc/arthas-tutorials.html                  
+version    4.0.4                                                                
+main_class demo.MathGame                                                        
+pid        81531                                                                
+time       2024-12-12 11:32:01.835                                              
+
+[arthas@81531]$ 
+```
+
+​	方式2：运行时选择Java进程PID。
+
+```bash
+% java -jar arthas-boot.jar [PID]
+```
+
+​	查看PID的方式可以通过ps命令，也可以通过JDK提供的jps命令，运行结果如下图所示。
+
+```bash
+% jps                       
+51234 Main
+62292 Launcher
+853 
+81531 math-game.jar
+81567 arthas-boot.jar
+81998 Jps
+% java -jar arthas-boot.jar 81531
+[INFO] JAVA_HOME: /Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
+[INFO] arthas-boot version: 4.0.4
+[INFO] Process 81531 already using port 3658
+[INFO] Process 81531 already using port 8563
+[INFO] arthas home: /Users/wenqiu/.arthas/lib/4.0.4/arthas
+[INFO] The target process already listen port 3658, skip attach.
+[INFO] arthas-client connect 127.0.0.1 3658
+  ,---.  ,------. ,--------.,--.  ,--.  ,---.   ,---.                           
+ /  O  \ |  .--. ''--.  .--'|  '--'  | /  O  \ '   .-'                          
+|  .-.  ||  '--'.'   |  |   |  .--.  ||  .-.  |`.  `-.                          
+|  | |  ||  |\  \    |  |   |  |  |  ||  | |  |.-'    |                         
+`--' `--'`--' '--'   `--'   `--'  `--'`--' `--'`-----'                          
+
+wiki       https://arthas.aliyun.com/doc                                        
+tutorials  https://arthas.aliyun.com/doc/arthas-tutorials.html                  
+version    4.0.4                                                                
+main_class demo.MathGame                                                        
+pid        81531                                                                
+time       2024-12-12 11:32:01.835                                              
+
+[arthas@81531]$ 
+```
+
+​	可以通过“java -jar arthas-boot.jar –h”命令来查看启动Arthas的参数选项，如下图所示。
+
+```bash
+% java -jar arthas-boot.jar -h
+```
+
+​	使用如下命令可以查看Arthas日志。
+
+```bash
+% cat ~/logs/arthas/arthas.log
+```
+
+​	除了在命令行查看外，Arthas目前还支持Web Console。在成功启动连接进程之后就已经自动启动，可以直接访问http://127.0.0.1:8563/，页面上的操作模式和控制台完全一样，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">Arthas Web Console</div>
+
+![image-20241212115343308](images/image-20241212115343308.png)
+
+​	使用“quit”或“exit”命令可以退出当前客户端使用。“stop”或“shutdown”命令可以关闭Arthas服务端，并退出所有客户端。
+
+```bash
+$ stop
+Resetting all enhanced classes ...
+Affect(class count: 0 , method count: 0) cost in 0 ms, listenerId: 0
+Arthas Server is going to shutdown...
+[arthas@81531]$ session (2803ff64-9ffc-47ed-9dc6-11a54d2f1f7e) is closed because server is going to shutdown.
+```
+
+### 22.6.3 相关诊断命令
+
+​	进入到客户端之后，需要输入相关的命令，基础命令如下表所示。
+
+<div style="text-align:center;font-weight:bold;">Arthas基础命令</div>
+
+![image-20241212120115024](images/image-20241212120115024.png)
+
+​	例如，在客户端输入help命令，结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">Arthas Web Console</div>
+
+![image-20241212122736815](images/image-20241212122736815.png)
+
+​	命令可以分为JVM相关命令、class/classloader相关命令和monitor/watch/trace相关命令以及其他的命令，下面分别展开讲解。
+
+#### 1 JVM相关命令
+
+##### dashboard命令
+
+​	可以查看当前系统的实时数据面板。展示当前应用的多线程状态、JVM各区域、GC情况等信息，输入“Q”或者按“Ctrl+C”可以退出dashboard命令，如果加入“-n”参数，则在输出指定次数之后，自动退出。dashboard命令参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">dashboard命令参数</div>
+
+![image-20241212123148003](images/image-20241212123148003.png)
+
+​	例如“dashboard -i 1000 -n 2”表示每隔1s输出一次信息，总共输出两次。
+
+​	dashboard命令输出结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">dashboard命令输出结果</div>
+
+<img src="images/image-20241212123318265.png" alt="image-20241212123318265" style="zoom:50%;" />
+
+​	可以看到，这里会显示出线程（按照CPU占用百分比倒排）、内存（堆空间实时情况）、GC情况等数据。对上图的内容进行解析，如下表所示。
+
+<div style="text-align:center;font-weight:bold;">dashboard命令结果含义</div>
+
+![image-20241212123648985](images/image-20241212123648985.png)
+
+##### thread命令
+
+查看当前JVM的线程堆栈信息。thread命令参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">thread命令参数</div>
+
+![image-20241212124803933](images/image-20241212124803933.png)
+
+​	例如，有时候发现应用卡住了，通常是由于某个线程拿住了某个锁，并且其他线程都在等待这把锁。为了排查这类问题，Arthas提供了thread –b命令可以一键找出罪魁祸首，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">Arthas thread命令</div>
+
+![image-20241212125321895](images/image-20241212125321895.png)
+
+##### JVM命令
+
+​	查看JVM详细的性能数据，由于篇幅原因，只展示部分截图，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">Arthas JVM命令</div>
+
+![image-20241212125848858](images/image-20241212125848858.png)
+
+​	Arthas关于JVM相关的命令很多，剩下的命令作者不再一一演示，如下表所示。
+
+<div style="text-align:center;font-weight:bold;">JVM相关命令</div>
+
+![image-20241212124632162](images/image-20241212124632162.png)
+
+#### 2 class/classloader相关命令
+
+​	与类的字节码文件以及类加载器相关的命令有以下几种，如下表所示。
+
+<div style="text-align:center;font-weight:bold;">字节码相关命令</div>
+
+![image-20241212131622485](images/image-20241212131622485.png)
+
+##### sc命令
+
+​	查看JVM已加载的类信息，参数说明如表所示。
+
+<div style="text-align:center;font-weight:bold;">sc命令参数选项</div>
+
+![image-20241212132023134](images/image-20241212132023134.png)
+
+​	class-pattern支持全限定名，如com/test/AAA，也支持com.test.AAA这样的格式，这样从异常堆栈里面把类名复制过来的时候，不需要再手动把“/”替换为“.”了。
+
+​	sc默认开启了子类匹配功能，也就是说所有当前类的子类也会被搜索出来，想要精确地匹配，请打开options disable-sub-class true开关。
+
+​	使用案例如下，模糊查询com.coding.*包下的相关类信息，其中有两个动态类，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">模糊查询类信息</div>
+
+![image-20241212132326539](images/image-20241212132326539.png)
+
+​	打印类的详细信息，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">打印类的详细信息</div>
+
+![image-20241212132701531](images/image-20241212132701531.png)
+
+##### sm命令
+
+​	“Search-Method”的简写，这个命令能搜索出所有已经加载了Class信息的方法信息。sm命令只能看到由当前类所声明的方法，父类则无法看到。参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">sm命令参数选项</div>
+
+![image-20241212132923596](images/image-20241212132923596.png)
+
+​	使用案例如下，这里注意要写类的全路径，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">打印类的方法信息</div>
+
+![image-20241212133053724](images/image-20241212133053724.png)
+
+##### jad命令
+
+​	反编译指定已加载类的源码，jad命令将JVM中实际运行的类的字节码反编译成Java代码，便于理解业务逻辑。在Arthas Console上，反编译出来的源码是带语法高亮的，阅读更方便。当然，反编译出来的Java代码可能会存在语法错误，但不影响进行阅读理解。参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">jad命令参数选项</div>
+
+![image-20241212133234050](images/image-20241212133234050.png)
+
+​	下面的案例反编译demo.MathGame，结果如下。
+
+![image-20241212133703470](images/image-20241212133703470.png)
+
+​	反编译时只显示源代码。默认情况下，反编译结果里会带有ClassLoader信息，通过--source-only选项，可以只打印源代码，方便和mc/retransform命令结合使用。
+
+![image-20241212133858503](images/image-20241212133858503.png)
+
+​	反编译指定的方法。
+
+![image-20241212134051780](images/image-20241212134051780.png)
+
+​	反编译时不显示行号(lineNumber)，参数默认值为true，显示指定为false则不打印行号.
+
+![image-20241212134259130](images/image-20241212134259130.png)
+
+​	反编译时指定ClassLoader，当有多个ClassLoader都加载了这个类时，jad命令会输出对应ClassLoader实例的hashcode，然后只需要重新执行jad命令，并使用参数-c <hashcode>就可以反编译指定ClassLoader加载的那个类了。
+
+​	对于只有唯一实例的ClassLoader，还可以通过--classLoaderClass指定class name，使用起来更加方便。--classLoaderClass的值是ClassLoader的类名，只有匹配到唯一的ClassLoader实例时才能工作，目的是方便输入通用命令，而-c <hashcode>是动态变化的。
+
+##### mc命令
+
+​	Memory Compiler/内存编译器，编译.java文件生成class。
+
+##### redefine命令
+
+​	加载外部的class文件，redefine JVM已加载的类。推荐使用retransform命令代替redefine命令。
+
+##### ClassLoader命令
+
+​	查看ClassLoader的继承树、urls和类加载信息。了解当前系统中有多少类加载器，以及每个加载器加载的类数量，帮助判断是否有类加载器泄漏。可以让指定的ClassLoader去getResources，打印出所有查找到的resources的url，对于ResourceNotFoundException比较有用。参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">ClassLoader命令参数选项</div>
+
+![image-20241212150036590](images/image-20241212150036590.png)
+
+​	使用案例如下，按类加载类型查看统计信息，如下图所示，可以看到AppClassLoader总共加载了4173个类。
+
+<div style="text-align:center;font-weight:bold;">ClassLoader指令</div>
+
+![image-20241212150239863](images/image-20241212150239863.png)
+
+#### 3 monitor/watch/trace相关命令
+
+​	系统监控相关的命令有以下几种，如下表所示。
+
+<div style="text-align:center;font-weight:bold;">系统监控相关命令</div>
+
+![image-20241212152638751](images/image-20241212152638751.png)
+
+##### monitor命令
+
+​	方法执行监控。对匹配class-pattern/method-pattern的类、方法的调用进行监控，涉及方法的调用次数、执行时间、失败率等。monitor命令是一个非实时返回命令。实时返回命令是输入之后立即返回，而非实时返回的命令，则是不断地等待目标Java进程返回信息，直到用户输入Ctrl+C为止。服务端是以任务的形式在后台跑任务，植入的代码随着任务的中止而不会被执行，所以任务关闭后，不会对原有性能产生太大影响，而且原则上，任何Arthas命令不会引起原有业务逻辑的改变，监控的维度说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">monitor命令监控项</div>
+
+![image-20241212153548958](images/image-20241212153548958.png)
+
+​	参数说明如下表所示，方法拥有一个命名参数[c:]，意思是统计周期(cycle of output)，拥有一个整型的参数值。
+
+<div style="text-align:center;font-weight:bold;">monitor命令参赛选项</div>
+
+![image-20241212153921055](images/image-20241212153921055.png)
+
+##### watch命令
+
+​	方法执行数据观测，可以方便地观察到指定方法的调用情况。能观察到的范围为返回值、抛出异常、入参，通过编写groovy表达式进行对应变量的查看。watch的参数比较多，主要是因为它能在4个不同的场景观察对象，参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">watch命令参数选项</div>
+
+![image-20241212154109785](images/image-20241212154109785.png)
+
+​	这里重点要说明的是观察表达式，观察表达式主要由ognl表达式组成，所以可以这样写“{params,returnObj}”，只要是一个合法的ognl表达式，都能被正常支持。观察的维度也比较多，主要体现在参数advice的数据结构上。Advice参数最主要是封装了通知节点的所有信息。
+
+##### trace命令
+
+​	方法内部调用路径，并输出方法路径上的每个节点上耗时。trace命令能主动搜索class-pattern/method-pattern对应的方法调用路径，渲染和统计整个调用链路上的所有性能开销和追踪调用链路，便于帮助定位和发现因RT高而导致的性能问题缺陷，但其每次只能跟踪一级方法的调用链路。trace在执行的过程中本身是会有一定的性能开销，在统计的报告中并未像JProfiler一样预先减去其自身的统计开销，所以统计出来有些不准，渲染路径上调用的类、方法越多，性能偏差越大，但还是能让各位读者看清一些事情的。参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">trace命令参数选项</div>
+
+![image-20241212162922339](images/image-20241212162922339.png)
+
+##### stack命令
+
+​	输出当前方法被调用的调用路径。很多时候我们都知道一个方法被执行了，但这个方法被执行的路径非常多，根本不知道这个方法是从哪里被执行了，此时需要的是stack命令。参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">stack命令参数选项</div>
+
+![image-20241212163115436](images/image-20241212163115436.png)
+
+​	使用案例如下，打印run方法的调用栈信息，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">stack命令</div>
+
+![image-20241212163340515](images/image-20241212163340515.png)
+
+##### tt命令
+
+​	TimeTunnel的缩写，方法执行数据的时空隧道，记录下指定方法每次调用的入参和返回信息，并能对这些不同时间下的调用进行观测。watch虽然方便灵活，但需要提前想清楚观察表达式的拼写，这对排查问题而言要求太高，因为很多时候我们并不清楚问题出自何方，只能靠蛛丝马迹进行猜测，这个时候如果能记录下当时方法调用的所有入参和返回值、抛出的异常，会对整个问题的思考与判断非常有帮助。于是，TimeTunnel命令就诞生了。参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">tt命令参数选项</div>
+
+![image-20241212163632632](images/image-20241212163632632.png)
+
+​	如下图所示，打印run方法的每次执行情况。
+
+<div style="text-align:center;font-weight:bold;">tt命令</div>
+
+![image-20241212164007165](images/image-20241212164007165.png)
+
+#### 其他命令
+
+​	除了上面作者为大家归类好的一些命令，还有很多其他命令，这里再列举两个供各位读者参考学习。
+
+##### profiler命令
+
+​	支持生成应用热点的火焰图。本质上是通过不断地采样，然后把收集到的采样结果生成火焰图。参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">profiler命令参数选项</div>
+
+![image-20241212164342489](images/image-20241212164342489.png)
+
+​	案例如下。
+
+①启动profiler，如下所示。
+
+```bash
+[arthas@81531]$ profiler start
+Profiling started
+```
+
+②获取已采集的sample的数量，如下所示。
+
+```bash
+[arthas@81531]$ profiler getSamples
+4
+```
+
+③查看profiler状态
+
+```bash
+[arthas@81531]$ profiler status
+Profiling is running for 24 seconds
+```
+
+④停止profiler，生成svg格式结果，如图22-122所示。
+
+```bash
+[arthas@81531]$ profiler stop
+OK
+profiler output file: /Users/wenqiu/Misc/arthas-output/20241212-164822.html
+```
+
+​	默认情况下，生成的结果保存到应用的工作目录下的arthas-output目录。可以通过--file参数来指定输出结果路径。比如，profiler stop --file /tmp/output.svg。可以通过--format来设置生成html格式结果。比如，profiler stop --format html。通过浏览器查看arthas-output下面的profiler结果。
+
+​	默认情况下，Arthas使用3658端口，可以打开http://localhost:3658/arthas-output/查看arthas-output目录下面的profiler结果，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">profiler结果目录</div>
+
+![image-20241212170049591](images/image-20241212170049591.png)
+
+​	单击可以查看具体的结果，如下图所示，这种图称为火焰图。在追求极致性能的场景下，了解程序运行过程中CPU在干什么很重要，火焰图就是一种非常直观的展示CPU在程序整个生命周期过程中时间分配的工具。这个工具可以非常直观地显示出调用栈中的CPU消耗瓶颈，通过x轴横条宽度来度量时间指标，y轴代表线程栈的层次。
+
+<div style="text-align:center;font-weight:bold;">火焰图</div>
+
+![image-20241212170221059](images/image-20241212170221059.png)
+
+##### options命令
+
+​	全局开关。参数说明如下表所示。
+
+<div style="text-align:center;font-weight:bold;">options命令参数选项</div>
+
+![image-20241212170448517](images/image-20241212170448517.png)
+
+​	案例如下。
+
+①查看所有的options，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">查看所有options</div>
+
+![image-20241212170802110](images/image-20241212170802110.png)
+
+②获取option的值，如下图所示，json-format的值为false。
+
+<div style="text-align:center;font-weight:bold;">获取options的值</div>
+
+![image-20241212170916824](images/image-20241212170916824.png)
+
+③设置指定的option，例如，打开执行结果存日志功能，输入如下命令即可。
+
+![image-20241212171357971](images/image-20241212171357971.png)
+
+## 22.7 Java Mission Control
+
+### 22.7.1 概述
+
+​	Java Mission Control(JMC)是Java官方提供的性能强劲的工具，它是一个用于对Java应用程序进行管理、监视、概要分析和故障排除的工具套件。它包含一个GUI客户端，以及众多用来收集JVM性能数据的插件，如JMX Console（能够访问用来存放JVM各个子系统运行数据的MXBeans），以及JVM内置的高效profiling工具Java Flight Recorder(JFR)。
+
+​	JMC的另一个优点就是采用取样，而不是传统的代码植入技术，对应用性能的影响非常非常小，完全可以开着JMC来做压测（唯一影响可能是Full GC次数增多）。
+
+​	在Oracle收购Sun之前，Oracle的JRockit虚拟机提供了一款名为JRockit Mission Control的虚拟机诊断工具。在Oracle收购Sun之后，Oracle公司同时拥有了Sun HotSpot和JRockit两款虚拟机。根据Oracle对于Java的战略，在今后的发展中，会将JRockit的优秀特性移植到HotSpot上。其中，一个重要的改进就是在Sun的JDK中加入了JRockit的支持。
+
+### 22.7.2 安装使用
+
+​	Java组件官网：https://docs.oracle.com/en/java/java-components/index.html
+
+​	Java Mission Control官网： https://docs.oracle.com/en/java/java-components/jdk-mission-control/
+
+​	Java Mission Control下载官网：https://www.oracle.com/java/technologies/javase/products-jmc8-downloads.html
+
+​	下载解压完成后，执行包拖入“应用程序”即可。
+
+​	点击打开，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JMC界面</div>
+
+![image-20241212174524089](images/image-20241212174524089.png)
+
+​	如果是远程服务器，使用前要开JMX，使用如下流程即可打开。
+
+​	(1)服务器配置如下。
+
+![image-20241212174552186](images/image-20241212174552186.png)
+
+​	(2)客户端单击“文件”→“连接”→“创建新连接”，填入上面JMX参数的host和port。
+
+
+
+​	点击”单击此处可开始使用 JDK Mission Control“即可进入主界面，然后右键一个Java进程，选择”启动 JMX 控制台“即可打开控制台。
+
+![image-20241212175306789](images/image-20241212175306789.png)
+
+​	“概览”界面如下图所示，Mission Control的界面非常有特色，在默认的界面中，以飞机仪表的视图显示了Java堆使用率、CPU使用率、Live Set和Fragmentation。
+
+<div style="text-align:center;font-weight:bold;">JMC概览界面</div>
+
+![image-20241212175421290](images/image-20241212175421290.png)
+
+### 22.7.3 功能介绍
+
+​	JMC的一大特点是可以自由设置图表内容。比如，如果希望在飞机仪表面板再增加一个监控项，可以单击右侧的添加按钮“+”，按需添加各种统计图表，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JMC画板界面</div>
+
+![image-20241212175648711](images/image-20241212175648711.png)
+
+​	例如添加Java堆的空闲内存仪表监控，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JMC添加仪表监控界面</div>
+
+<img src="images/image-20241212175807256.png" alt="image-20241212175807256" style="zoom:50%;" />
+
+​	单击“完成”按钮，可以看到面板中多了“Free Java Heap Memory”仪表监控，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JMC添加仪表监控界面</div>
+
+![image-20241212180042166](images/image-20241212180042166.png)
+
+​	JMC概览界面底部选项中的“触发器”选项可以根据CPU、线程等信息，设定一定的阈值来触发报警，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JMC触发器设置界面</div>
+
+<img src="images/image-20241212222555122.png" alt="image-20241212222555122" style="zoom:50%;" />
+
+​	“内存”选项提供堆和GC的信息。重点关注GC次数、时间，以及随着GC发生堆的内存变化情况，以此来调整JVM参数，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JMC内存界面</div>
+
+<img src="images/image-20241212223150584.png" alt="image-20241212223150584" style="zoom:50%;" />
+
+​	“线程”选项可以关注每条线程所占的CPU、死锁情况和线程堆栈信息，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JMC线程界面</div>
+
+<img src="images/image-20241212223329506.png" alt="image-20241212223329506" style="zoom:50%;" />
+
+### 22.7.4 Java Flight Recorder介绍
+
+​	Java Flight Recorder(JFR)是JMC的一个组件。JFR能够以极低的性能开销收集JVM的性能数据。自Java11开始，JFR已经开源。但在之前的Java版本，JFR属于商业范畴，需要通过JVM参数-XX:+UnlockCommercialFeatures开启。JFR的性能开销很小，在默认配置下平均低于1%。与其他工具相比，JFR能够直接访问JVM内的数据，并且不会影响JVM的优化。因此，它非常适用于生产环境下满负荷运行的Java程序。
+
+​	JFR和JMC共同创建了一个完整的工具链。JMC可对JFR连续收集低水平和详细的运行时信息进行高效详细的分析。
+
+​	当启用时，JFR将记录运行过程中发生的一系列事件。其中包括Java层面的事件，如线程事件、锁事件，以及JVM内部的事件，如新建对象、垃圾回收和即时编译事件。
+
+​	按照发生时机以及持续时间来划分，JFR的事件共有四种类型。
+
+​	1、瞬时事件(Instant Event)：用户关心的是它们发生与否，例如异常、线程启动事件。
+
+​	2、持续事件(Duration Event)：用户关心的是它们的持续时间，例如垃圾回收事件。
+
+​	3、计时事件(Timed Event)：时长超出指定阈值的持续事件。
+
+​	4、取样事件(Sample Event)：周期性取样的事件。
+
+​	取样事件的其中一个常见例子便是方法抽样(Method Sampling)，即每隔一段时间统计各个线程的栈轨迹。如果在这些抽样取得的栈轨迹中存在一个反复出现的方法，那么就可以推测该方法是否为热点方法。
+
+​	JFR启动方式主要有三种。
+
+​	1、第一种是在运行目标Java程序时添加-XX:StartFlightRecording=参数。
+
+​	比如，下面命令中，JFR将会在JVM启动5s后（对应delay=5s）收集数据，持续20s（对应duration=20s）。当收集完毕后，JFR会将收集得到的数据保存至指定的文件中（对应filename=myrecording.jfr）。settings=profile指定了JFR所收集的事件类型。默认情况下，JFR将加载配置文件JDK/lib/jfr/default.jfc，并识别其中所包含的事件类型。当使用了settings=profile配置时，JFR将加载配置文件JDK/lib/jfr/default.jfc，并识别其中所包含的事件类型。该配置文件所包含的事件类型要多于默认的default.jfc，因此性能开销也要大一些（约为2%）。default.jfc以及profile.jfc均为XML文件。
+
+```bash
+-XX:StartFlightRecording=delay=5s,duration=20s,filename=myrecording.jfr,settings=profile
+```
+
+​	由于JFR将持续收集数据，如果不加以限制，那么JFR可能会填满硬盘的所有空间。因此，我们有必要对这种模式下所收集的数据进行限制。比如，在这条命令中，maxage=10m指的是仅保留10分钟以内的事件，maxsize=100m指的是仅保留100MB以内的事件。一旦所收集的事件达到其中任意一个限制，JFR便会开始清除不合规格的事件。然而，为了保持较小的性能开销，JFR并不会频繁地校验这两个限制。因此，在实践过程中往往会发现指定文件的大小超出限制，或者文件中所存储事件的时间超出限制。最后一个参数name就是一个标签，当同一进程中存在多个JFR数据收集操作时，可以通过该标签来辨别。
+
+```bash
+-XX:StartFlightRecording=maxage=10m,maxsize=100m,name=SomeLabel
+```
+
+​	2、通过jcmd来让JFR开始收集数据、停止收集数据，或者保存所收集的数据，对应的子命令分别为JFR.start、JFR.stop，以及JFR.dump。
+
+```bash
+$ jcmd <PID>JFR.start settings=profile maxage=10m maxsize=150m￼name=SomeLabel
+```
+
+​	上述命令运行过后，目标进程中的JFR已经开始收集数据。此时，可以通过下述命令来导出已经收集到的数据。
+
+```bash
+$ jcmd <PID>JFR.dump name=SomeLabel filename=myrecording.jfr
+```
+
+​	最后，可以通过下述命令关闭目标进程中的JFR。
+
+```bash
+$ jcmd <PID>JFR.stop name=SomeLabel
+```
+
+​	3、通过JMC的JFR组件来启动，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">启动JFR组件界面</div>
+
+<img src="images/image-20241213001442447.png" alt="image-20241213001442447" style="zoom:50%;" />
+
+​	通过JFR取样分析需要先在程序运行前添加JVM参数，参数如下。
+
+```bash
+# JDK9及更高版本
+-XX:+UnlockCommercialFeatures -XX:StartFlightRecording
+# JDK7u4及更高版本：
+-XX:+UnlockCommercialFeatures -XX:+FlightRecorder -XX:FlightRecorderOptions=defaultrecording=true
+```
+
+<img src="images/image-20241213020135187.png" alt="image-20241213020135187" style="zoom:50%;" />
+
+​	否则将会报以下问题，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">问题提示界面</div>
+
+![image-20241213012719936](images/image-20241213012719936.png)
+
+​	当右击选择弹出菜单中的“Start Flight Recording…”或者直接双击，JMC便会弹出另一个窗口，用来配置JFR的启动参数，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">配置JFR的启动参数</div>
+
+<img src="images/image-20241213005854516.png" alt="image-20241213005854516" style="zoom:50%;" />
+
+​	这里的配置参数与前两种启动JFR的方式并无二致，同样也包括标签名、收集数据的持续时间、缓存事件的时间及空间限制，以及配置所要监控事件的Event settings（这里对应前两种启动方式的settings=default|profile）。JMC提供了两个选择：Continuous和Profiling，分别对应$JDK/lib/jfr/里的default.jfc和profile.jfc。
+
+​	取样时间默认1分钟，可自行按需调整，事件设置选Profiling，然后可以设置取样Profile哪些信息。比如加上对象数量的统计：“Java Virtual Machine”→“GC”→“Detailed”→“Object Count/Object Count after GC”，如下图所示，勾选右侧“已启用”。
+
+<div style="text-align:center;font-weight:bold;">设置取样指标</div>
+
+<img src="images/image-20241213003548096.png" alt="image-20241213003548096" style="zoom:50%;" />
+
+​	方法调用采样的间隔从10ms改为1ms，注意不能低于1ms，否则会影响性能。选择“Java Virtual Machine”→“Profiling”→“Method Profiling Sample/Method Sampling Information”选项，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">设置采样间隔时间</div>
+
+<img src="images/image-20241213004750285.png" alt="image-20241213004750285" style="zoom:50%;" />
+
+​	然后就开始Profile，到时间后Profile结束，会自动把记录下载回来，在JMC中展示，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">采样记录展示</div>
+
+<img src="images/image-20241213014025086.png" alt="image-20241213014025086" style="zoom:50%;" />
+
+​	从展示信息中，我们大致可以读到内存、CPU、代码、线程和I/O等比较重要的信息展示。它可以显示系统中的热点方法和占用的时间，下图显示了占用CPU时间最多的方法调用树信息。
+
+## 22.8 其他工具
+
+### 22.8.1 TProfiler
+
+​	TProfiler的下载： https://github.com/alibaba/TProfiler/wiki
+
+​	阿里开源工具TProfiler可以用来定位性能代码，解决GC过于频繁的性能瓶颈，并最终将系统TPS再提升。TProfiler的下载地址可扫码获取。
+
+​	TProfiler配置部署、远程操作、日志阅读都不太复杂，但是其却能够起到一针见血、立竿见影的效果，帮助解决GC过于频繁的性能瓶颈。
+
+​	TProfiler最重要的特性就是能够统计出指定时间段内JVM的top method，这些top method极有可能就是造成JVM性能瓶颈的元凶。这是其他大多数JVM调优工具所不具备的，包括JRockit Mission Control。JRockit开发人员Marcus Hirt曾明确指出JRMC并不支持TOP方法的统计。
+
+### 22.8.2 Java运行时追踪工具BTrace
+
+​	BTrace是SUN Kenai云计算开发平台下的一个开源项目，旨在为Java提供安全可靠的动态跟踪分析工具，是一个Java平台的安全的动态追踪工具，可以用来动态地追踪一个运行的Java程序。BTrace通过动态调整目标应用程序的类，从而注入跟踪代码，我们称这种方法为字节码跟踪。
+
+​	另外还有其他工具可以供各位读者参考使用，例如HouseMD（该项目已经停止开发）、Greys-Anatomy（个人开发）、Byteman（JBoss出品）、YourKit、JProbe，以及Spring Insight等。
 
 # 第23章 JVM运行时参数
+
+​	熟悉JVM参数对于系统调优是非常重要的。比如一个高流量的延迟的电子交易平台，它要求的响应时间都是毫秒级的。要获得适合的参数组合需要大量的分析和不断地尝试，更依赖交易系统的特性。
+
+​	在前面的章节中，多多少少都使用到了JVM参数，比如配置堆的初始化大小、堆空间最大值，以及输出日志信息等参数。但是并没有很详细地介绍JVM运行时参数都有哪些以及它们有哪些分类。本章将主要讲解JVM的运行时参数的分类及其使用方式。
+
+## 23.1 JVM参数选项类型
+
+​	JVM参数总体上来说分为三大类，分别是标准参数选项、非标准参数选项和非稳定参数选项，下面分别详细介绍三大参数类型。
+
+### 23.1.1 标准参数选项
+
+​	所有的JVM都必须实现标准参数的功能，而且向后兼容。标准参数是相对比较稳定的参数，后续版本基本不会发生变化，参数以“-”开头，例如读者常见的“-version”参数就是标准参数。获取标准参数的命令是在终端输入“java”或者“java --help”命令即可，获取结果如下表所示。
+
+<div style="text-align:center;font-weight:bold;">标准化参数选项</div>
+
+![image-20241213064637440](images/image-20241213064637440.png)
+
+​	需要注意的是HotSpot虚拟机的两种模式，分别是Server和Client，分别通过-server和-client模式设置。
+
+​	在32位Windows系统上，默认使用Client类型的JVM。要想使用Server模式，则机器配置至少有2个以上的CPU和2GB以上的物理内存。Client模式适用于对内存要求较小的桌面应用程序，默认使用Serial串行垃圾收集器。
+
+​	64位机器上只支持Server模式的JVM，适用于需要大内存的应用程序，默认使用并行垃圾收集器。
 
 # 第24章 GC日志分析
 
@@ -14388,601 +15095,6 @@ class Data {
 ![image-20240914130228189](images/image-20240914130228189.png)
 
 # 五、性能监控（命令行、可视化工具）（<span style="color:red;font-weight:bold;">下篇</span>）
-
-### 3.6、Arthas【推荐：5颗星】
-
-https://arthas.aliyun.com/
-
-#### 3.6.1、基本概述
-
-<span style="color:blue;font-weight:bold;">背景</span>
-
-​	前面，我们介绍了jdk自带的jvisualvm等免费工具，以及商业化工具JProfiler。
-
-​	这两款工具在业界知名度也比较高，他们的优点是可以图形界面上看到各维度的性能数据，使用者根据这些数据进行综合分析，然后判断哪里出现了性能问题。
-
-​	但是这两款工具也有缺点，都必须在服务端项目进程中配置相关的监控参数。然后工具通过远程连接到项目进程，获取相关的数据。这样就会带来一些不便，比如线程环境的网络是隔离的，本地的监控工具根本连不上线上环境。并且类似于JProfiler这样的商业工具，是需要付费的。
-
-​	那么有没有一款工具不需要远程连接，也不需要配置监控参数，同时也提供了丰富的性能监控数据呢？
-
-<span style="color:red;font-weight:bold;">今天，给大家介绍一款阿里巴巴开源的性能分析神奇Arthas（阿尔萨斯）</span>
-
-<span style="color:blue;font-weight:bold;">概述</span>
-
-​	Arthas（阿尔萨斯）是Alibaba开源的Java诊断工具，深受开发者喜爱。在线排查问题，无需重启；动态跟踪Java代码；实时监控JVM状态。
-
-​	Arthas支持JDK6+（4.x 版本不再支持 JDK 6 和 JDK 7），支持Linux/Mac/Windows，采用命令行交互模式，同时提供丰富的Tab自动补全功能，进一步方便进行问题的定位和诊断。
-
-​	当你遇到以下类似问题而束手无策时，Arthas可以帮助你解决：
-
-- 这个类从哪个jar包加载的？为什么会报各种类相关的Exception？
-- 我改的代码为什么没有执行到？难道是我没commit？分支搞错了嘛？
-- 遇到问题无法在线上debug，难道只能通过加日志再重新发布吗？
-- 线上遇到某个用户的数据处理有问题，但线上同样无法debug，线下无法重现！
-- 是否有一个全局视角来查看系统的运行状况？
-- 有什么办法可以监控到JVM的实时运行状态？
-
-<span style="color:blue;font-weight:bold;">基于哪些工具开发而来</span>
-
-- greys-anatomy：Arthas代码基于Greys二次开发而来，非常感谢Greys之前所有的工作，以及Greys原作者对Arthas提出的意见和建议！
-- termd：Arthas的命令行实现基于termd开发，是一款优秀的命令行程序开发框架，感谢termd提供了优秀的框架。
-- crash：Arthas的文本渲染功能基于crash中的文本渲染功能开发，可以从这里看到源码，感谢crash在这方面所做的优秀工作。
-- cli：Arthas的命令行界面基于vert.x提供的cli库进行开发，感谢vert.x在这方面做的优秀工作。
-- compiler Arthas里的内存编译器代码来源。
-- Apache Commons Net Arthas里的Telnet Client代码来源
-- JavaAgent：运行在main方法之前的拦截器，它内定的方法名叫premain，也就是说先执行premain方法然后再执行main方法。
-- ASM：一个通用的Java字节码操作和分析框架。它可以用于修改现有的类或直接以二进制形式动态生成类。ASM提供了一些常见的字节码转换和分析算法，可以从它们构建定制的复杂转换和代码分析工具。ASM提供了与其他Java字节码框架类似的功能，但是主要关注性能。因为它被设计和实现得尽可能小和快，所以非常适合在动态系统中使用（当然也可以以静态方式使用，例如在编译期中）
-
-#### 3.6.2、安装与使用
-
-<span style="color:blue;font-weight:bold;">安装</span>
-
-- 安装【推荐】
-
-```bash
-curl -O https://arthas.aliyun.com/arthas-boot.jar
-java -jar arthas-boot.jar
-```
-
-- 卸载
-
-```bash
-rm -rf ~/.arthas/
-rm -rf ~/logs/arthas
-rm -rf ~/logs/arthas-cache
-```
-
-- 全量安装
-
-最新版本，点击下载：https://arthas.aliyun.com/download/latest_version?mirror=aliyun
-
-解压后，在文件夹里有`arthas-boot.jar`，直接用`java -jar`的方式启动：
-
-```bash
-java -jar arthas-boot.jar
-```
-
-打印帮助信息：
-
-```bash
-java -jar arthas-boot.jar -h
-```
-
-<span style="color:blue;font-weight:bold;">工程目录</span>
-
-- arthas-agent：基于JavaAgent技术的代理。
-- bin：一些启动脚本
-- arthas-boot：Java版本的一键安装启动脚本
-- arthas-client：telnet client代码
-- arthas-common：一些共用的工具类和枚举类
-- arthas-core：核心库，各种arthas命令的交互和实现
-- arthas-demo：示例代码
-- arthas-memorycompiler：内存编译器代码，Fork from https://github.com/skalogs/SkaETL/tree/master/compiler
-- arthas-packaging：maven打包相关的
-- arthas-site：arthas站点
-- arthas-spy：编织到目标类中的各个切面
-- static：静态资源
-- arthas-testcase：测试
-
-<span style="color:blue;font-weight:bold;">启动</span>
-
-​	Arthas只是一个java程序，所以可以直接用java -jar运行。
-
-​	执行成功后，arthas提供了一种命令行的交互方式，arthas会检测当前服务器上的Java进程，并将进程列表展示出来，用户输入对应的编号（1、2、3、4...）进行选择，然后回车。
-
-比如，方式1：
-
-```bash
-$ java -jar arthas-boot.jar
-[INFO] JAVA_HOME: C:\Job\JobSoftware\Java64\jdk1.8.0_91\jre
-[INFO] arthas-boot version: 4.0.2
-[INFO] Found existing java process, please choose one and input the serial number of the process, eg : 1. Then hit ENTER.
-* [1]: 18760 com.coding.jvm07.gui.OOMTest
-  [2]: 18732 org.jetbrains.jps.cmdline.Launcher
-  [3]: 18860
-1
-[INFO] arthas home: C:\Users\limin\.arthas\lib\4.0.2\arthas
-[INFO] Try to attach process 18760
-[INFO] Attach process 18760 success.
-[INFO] arthas-client connect 127.0.0.1 3658
-  ,---.  ,------. ,--------.,--.  ,--.  ,---.   ,---.
- /  O  \ |  .--. ''--.  .--'|  '--'  | /  O  \ '   .-'
-|  .-.  ||  '--'.'   |  |   |  .--.  ||  .-.  |`.  `-.
-|  | |  ||  |\  \    |  |   |  |  |  ||  | |  |.-'    |
-`--' `--'`--' '--'   `--'   `--'  `--'`--' `--'`-----'
-
-wiki       https://arthas.aliyun.com/doc
-tutorials  https://arthas.aliyun.com/doc/arthas-tutorials.html
-version    4.0.2
-main_class
-pid        18760
-time       2024-10-19 16:39:12.427
-
-[arthas@18760]$
-```
-
-方式2：
-
-```bash
-$ java -jar arthas-boot.jar [PID]
-```
-
-<span style="color:blue;font-weight:bold;">查看日志</span>
-
-```bash
-$ vim ~/logs/arthas/arthas.log
-```
-
-<span style="color:blue;font-weight:bold;">web console</span>
-
-​	出了在命令行查看外，Arthas目前还支持Web Console。在成功启动连接进程之后就已经自动启动，可以直接访问 http://127.0.0.1:8563/ 访问，页面上的操作模式和控制台完全一样。
-
-<span style="color:blue;font-weight:bold;">退出</span>
-
-最后一行 [arthas@18760]$ ，说明打开进入了监控客户端，在这里就可以执行相关命令进行查看了。
-
-- 使用 quit\exit：退出当前客户端
-- 使用stop\shutdown：关闭arthas服务端，并退出所有客户端。
-
-#### 3.6.3、相关诊断指令
-
-##### 1、基础指令
-
-- help ： 查看命令帮助信息
-
-```bash
-$ help
-$ reset -h
-```
-
-- cat ： 打印文件内容，和linux里的cat命令类似
-
-```bash
-$ cat /tmp/a.txt
-```
-
-- echo ： 打印参数，和linux里的echo命令类似
-
-```bash
-$ echo 'hello'
-```
-
-- grep ： 匹配查找，和linux里的grep命令类似
-
-```bash
-$ cat .gitignore | grep java
-```
-
-- tee ： 复制标准输入到标准输出和指定的文件，和linux里的tee命令类似
-
-```bash
-$ cat .gitignore | grep java | tee tmp2.txt | grep hprof
-```
-
-- pwd ： 返回当前的工作目录，和linux命令类似
-- cls ： 清空当前屏幕区域
-- session ： 查看当前会话的信息
-- reset ： 重置增强类，将被Arthas增强的类全部还原，Arthas服务端关闭时会重置所有增强过的类
-- version ： 输出当前目标 Java 进程所加载的 Arthas 版本号
-- history ： 打印命令历史
-- quit ： 退出当前Arthas客户端，其他Arthas客户端不受影响
-- stop ： 关闭Arthas服务端，所有Arthas客户端全部退出
-- keymap ： Arthas快捷键列表及自定义快捷键
-- [base64](https://arthas.aliyun.com/doc/base64.html) - base64 编码转换，和 linux 里的 base64 命令类似
-
-```bash
-$ base64 --input /tmp/test.txt --output /tmp/result.txt
-```
-
-##### 2、JVM相关指令
-
-- [dashboard](https://arthas.aliyun.com/doc/dashboard.html) - 当前系统的实时数据面板
-
-```bash
-# 5秒打印一次，共2次
-$ dashboard -i 5000 -n 2
-ID NAME                GROUP     PRIORI STATE %CPU   DELTA TIME   INTER DAEMON
-1  main                main      5      TIMED 0.0    0.000 0:1.40 false false
--1 GC task thread#6 (P -         -1     -     0.0    0.000 0:0.14 false true
--1 GC task thread#9 (P -         -1     -     0.0    0.000 0:0.14 false true
--1 GC task thread#2 (P -         -1     -     0.0    0.000 0:0.14 false true
--1 GC task thread#8 (P -         -1     -     0.0    0.000 0:0.12 false true
--1 GC task thread#7 (P -         -1     -     0.0    0.000 0:0.12 false true
--1 GC task thread#3 (P -         -1     -     0.0    0.000 0:0.12 false true
--1 GC task thread#0 (P -         -1     -     0.0    0.000 0:0.10 false true
--1 GC task thread#1 (P -         -1     -     0.0    0.000 0:0.10 false true
--1 GC task thread#4 (P -         -1     -     0.0    0.000 0:0.09 false true
-Memory           used  total max  usage GC
-heap             363M  580M  580M                           3
-ps_eden_space    108M  160M  160M       gc.ps_scavenge.time 128
-ps_survivor_spac 0K    20480 2048 0.00% (ms)
-e                      K     0K         gc.ps_marksweep.cou 2
-ps_old_gen       254M  400M  400M       nt
-nonheap          41M   42M   -1         gc.ps_marksweep.tim 140
-code_cache       6M    6M    240M 2.65% e(ms)
-Runtime
-os.name                                 Windows 10
-os.version                              10.0
-java.version                            1.8.0_91
-```
-
-说明：
-
-ID ： Java级别的线程ID，注意这个ID不能跟jstack中的nativeID一一对应。
-
-NAME ： 线程名
-
-GROUP ：线程组名
-
-PRIORITY ：线程优先级, 1~10 之间的数字，越大表示优先级越高
-
-STATE: 线程的状态
-
-CPU% ：线程的 cpu 使用率。比如采样间隔 1000ms，某个线程的增量 cpu 时间为 100ms，则 cpu 使用率=100/1000=10%
-
-DELTA_TIME ：上次采样之后线程运行增量 CPU 时间，数据格式为`秒`
-
-TIME ：线程运行总 CPU 时间，数据格式为`分:秒`
-
-INTERRUPTED ：线程当前的中断位状态
-
-DAEMON ：是否是 daemon 线程
-
-- [thread](https://arthas.aliyun.com/doc/thread.html) - 查看当前 JVM 的线程堆栈信息
-
-```bash
-# 显示所有匹配的线程
-$ thread --all
-# 显示制定线程的运行堆栈
-$ thread <id>
-# 找出当前阻塞其他线程的线程（目前只支持找出 synchronized 关键字阻塞住的线程， 如果是java.util.concurrent.Lock， 目前还不支持）
-$ thread -b
-# 计算5秒内线程的CPU占用情况，指定采样时间间隔
-$ thread -i 5000
-# 按CPU利用率显示前n个线程数，-1表示显示所有线程（-1是数字）
-$ thread -n 3
-# 查看指定状态的线程
-$ thread --state WAITING
-```
-
-- [jvm](https://arthas.aliyun.com/doc/jvm.html) - 查看当前 JVM 的信息
-- [sysprop](https://arthas.aliyun.com/doc/sysprop.html) - 查看和修改 JVM 的系统属性
-- [sysenv](https://arthas.aliyun.com/doc/sysenv.html) - 查看 JVM 的环境变量
-- [vmoption](https://arthas.aliyun.com/doc/vmoption.html) - 查看和修改 JVM 里诊断相关的 option
-
-```bash
-# 查看指定的option
-$ vmoption PrintGC
-# 更新指定的option
-$ vmoption PrintGC true
-```
-
-- [perfcounter](https://arthas.aliyun.com/doc/perfcounter.html) - 查看当前 JVM 的 Perf Counter 信息
-- [logger](https://arthas.aliyun.com/doc/logger.html) - 查看和修改 logger
-- [getstatic](https://arthas.aliyun.com/doc/getstatic.html) - 查看类的静态属性
-- [ognl](https://arthas.aliyun.com/doc/ognl.html) - 执行 ognl 表达式
-- [mbean](https://arthas.aliyun.com/doc/mbean.html) - 查看 Mbean 的信息
-- [heapdump](https://arthas.aliyun.com/doc/heapdump.html) - dump java heap, 类似 jmap 命令的 heap dump 功能
-
-```bash
-# 只 dump live 对象
-$ heapdump --live dump.hprof
-```
-
-- [memory](https://arthas.aliyun.com/doc/memory.html) - 查看 JVM 的内存信息
-
-```bash
-$ memory
-Memory                            used       total      max         usage
-heap                              117M       580M       580M        20.30%
-ps_eden_space                     96M        160M       160M        60.16%
-ps_survivor_space                 0K         20480K     20480K      0.00%
-ps_old_gen                        21M        400M       400M        5.37%
-nonheap                           31M        32M        -1          97.20%
-code_cache                        5M         5M         240M        2.17%
-metaspace                         23M        24M        -1          97.08%
-compressed_class_space            2M         3M         1024M       0.28%
-direct                            0K         0K         -           112.50%
-mapped                            0K         0K         -           0.00%
-```
-
-- [vmtool](https://arthas.aliyun.com/doc/vmtool.html) - 从 jvm 里查询对象，执行 forceGc
-
-##### 3、class/classloader相关
-
-- [sc](https://arthas.aliyun.com/doc/sc.html) - 查看 JVM 已加载的类信息
-
-  ```bash
-  # 查询指定包下的类
-  $ sc com.coding.jvm07.gui.*
-  # 打印类的详细信息
-  $ sc -d com.coding.*.Picture
-  # 打印类的Field信息
-  $ sc -d -f com.coding.jvm07.gui.Picture
-  ```
-
-  - 常用参数
-    - class-pattern 类名表达式匹配
-    - -d 输出当前类的详细信息，包括这个类所加载的原始文件来源、类的声明、加载的ClassLoader等详细信息。如果一个类被多个ClassLoader所加载，会出现多次
-    - -E 开启正则表达式匹配，默认为通配符匹配
-    - -f 输出当前类的成员变量信息（需要配合参数-d一起使用）
-    - -x 指定输出静态变量时属性的遍历深度，默认为 0，即直接使用 toString 输出
-  - 补充
-
-  > 提示
-  >
-  > class-pattern 支持全限定名，如 com.taobao.test.AAA，也支持 com/taobao/test/AAA 这样的格式，这样，我们从异常堆栈里面把类名拷贝过来的时候，不需要在手动把`/`替换为`.`啦。
-
-  > 提示
-  >
-  > sc 默认开启了子类匹配功能，也就是说所有当前类的子类也会被搜索出来，想要精确的匹配，请打开`options disable-sub-class true`开关
-
-- [sm](https://arthas.aliyun.com/doc/sm.html) - 查看已加载类的方法信息
-
-  ```bash
-  # 查看一加载类的方法信息
-  $ sm com.coding.*.Picture
-  # 查询是否有指定的方法
-  $ sm com.coding.jvm07.gui.Picture getPixe*
-  # 查询方法详情，不指定方法时显示所有方法
-  $ sm -d com.coding.jvm07.gui.Picture getPixe*
-  ```
-
-  - sm 命令只能看到由当前类所声明（declaring）的方法，父类则无法看到。
-  - 常用参数：
-    - class-pattern 类名表达式匹配
-    - method-pattern 方法名表达式匹配
-    - -d 展示每个方法的详细信息
-    - -E 开启正则表达式匹配，默认为通配符匹配
-
-- [jad](https://arthas.aliyun.com/doc/jad.html) - 反编译指定已加载类的源码
-
-  > 在Arthas Console 上，反编译出来的源码是带语法高亮的，阅读更方便。当然，反编译过来的Java代码可能会存在语法错误，但不影响你进行阅读理解
-
-  ```bash
-  # 反编译类
-  $ jad com.coding.jvm07.gui.Picture
-  # 反编译类，通过 --source-only 可以仅显示源代码，忽略ClassLoader信息
-  $ jad --source-only com.coding.jvm07.gui.Picture
-  # 反编译指定方法（不支持模糊方法名）
-  $ jad com.coding.jvm07.gui.Picture getPixels
-  ```
-
-  - 常用参数
-    - class-pattern 类名表达式
-
-- [mc](https://arthas.aliyun.com/doc/mc.html) - 内存编译器，内存编译`.java`文件为`.class`文件
-
-- [retransform](https://arthas.aliyun.com/doc/retransform.html) - 加载外部的`.class`文件，retransform 到 JVM 里
-
-- [redefine](https://arthas.aliyun.com/doc/redefine.html) - 加载外部的`.class`文件，redefine 到 JVM 里
-
-- [dump](https://arthas.aliyun.com/doc/dump.html) - dump 已加载类的 byte code 到特定目录
-
-- [classloader](https://arthas.aliyun.com/doc/classloader.html) - 查看 classloader 的继承树，urls，类加载信息，使用 classloader 去 getResource
-
-  ```bash
-  # 树型结构显示类加载器
-  $ classloader -t
-  +-BootstrapClassLoader
-  +-sun.misc.Launcher$ExtClassLoader@7b2c5b5b
-    +-com.taobao.arthas.agent.ArthasClassloader@6896f809
-    +-sun.misc.Launcher$AppClassLoader@18b4aac2
-  # 类加载详情
-  $ classloader -l
-  ```
-
-##### 4、monitor/watch/trace相关
-
-> 注意
->
-> 请注意，这些命令，都通过字节码增强技术来实现的，会在指定类的方法中插入一些切面来实现数据统计和观测，因此在线上、预发使用时，请尽量明确需要观测的类、方法以及条件，诊断结束要执行 `stop` 或将增强过的类执行 `reset` 命令。
-
-- [monitor](https://arthas.aliyun.com/doc/monitor.html) - 方法执行监控
-
-  ```bash
-  $ monitor -c 10 com.coding.jvm07.gui.Picture <init>
-  ```
-
-  - 对匹配 class-pattern/method-pattern的类、方法的调用进行监控。涉及方法的调用次数、执行时间、失败率等
-
-  - monitor是一个非实时返回命令
-
-  - 常用参数
-
-    - class-pattern 类名表达式匹配
-    - method-pattern 方法名表达式匹配
-    - -c 统计周期，默认值为120秒
-
-  - 监控的维度说明
-
-    |    监控项 | 说明                       |
-    | --------: | :------------------------- |
-    | timestamp | 时间戳                     |
-    |     class | Java 类                    |
-    |    method | 方法（构造方法、普通方法） |
-    |     total | 调用次数                   |
-    |   success | 成功次数                   |
-    |      fail | 失败次数                   |
-    |        rt | 平均 RT                    |
-    | fail-rate | 失败率                     |
-
-- [watch](https://arthas.aliyun.com/doc/watch.html) - 方法执行数据观测
-
-  ```bash
-  $ watch com.coding.jvm07.gui.Picture <init> returnObj
-  ```
-
-  - 让你能方便的观察到指定方法的调用情况。能观察到的范围为：返回值、抛出异常、入参、通过编写groovy表达式进行对应变量的查看。
-  - 常用参数：
-    - class-pattern 类名表达式匹配
-    - method-pattern 方法名表达式匹配
-    - express 观察表达式
-    - condition-express 条件表达式
-    - -b 在方法调用之前观察（默认关闭）
-    - -e 在方法异常之后观察（默认关闭）
-    - -s 在方法返回之后观察（默认关闭）
-    - -f 在方法结束之后（正常返回和异常返回）观察（默认开启）
-    - -x 指定输出结果的属性遍历深度，默认为0
-  - 说明：这里重点要说明的是观察表达式，观察表达式的构成主要由ognl表达式组成，所以你可以这样写"{params,returnObj}"，只要是一个合法的ognl表达式，都能被正常支持。
-
-- [trace](https://arthas.aliyun.com/doc/trace.html) - 方法内部调用路径，并输出方法路径上的每个节点上耗时
-
-  ```bash
-  $ trace com.coding.jvm07.gui.Picture <init>
-  ```
-
-  - 补充说明
-    - trace 命令能主动搜索 class-pattern/method-pattern 对应的方法调用路径，渲染和统计整个调用链路上的所有性能开销和追踪调用链路。
-    - trace 能方便的帮助你定位和发现因RT高而导致的性能问题缺陷，但其每次只能跟踪一级方法的调用链路。
-    - trace 在执行的过程中本身是会由一定的性能开销，在统计的报告中并未像JProfiler一样预先减去其自身的统计开销。所以这统计起来由些许的不准，渲染路径上调用的类、方法越多，性能偏差越大。但还是能让你看清一些事情的。
-  - 参数说明
-    - class-pattern 类名表达式匹配
-    - method-pattern 方法名表达式匹配
-    - condition-express 条件表达式
-    - -n 命令执行次数
-
-- [stack](https://arthas.aliyun.com/doc/stack.html) - 输出当前方法被调用的调用路径
-
-  ```bash
-  $ stack com.coding.jvm07.gui.Picture <init>
-  ```
-
-  - 输出当前方法被调用的调用路径
-  - 常用参数
-    - class-pattern 类名表达式匹配
-    - method-pattern 方法名表达式匹配
-    - condition-express 条件表达式
-    - -n 执行次数限制
-
-- [tt](https://arthas.aliyun.com/doc/tt.html) - 方法执行数据的时空隧道，记录下指定方法每次调用的入参和返回信息，并能对这些不同的时间下调用进行观测
-
-  ```bash
-  $ tt com.coding.jvm07.gui.Picture <init>
-  ```
-
-  - TimeTunnel的缩写
-  - 常用参数
-    - -t 表示希望记录下来 *Test 的 print 方法的每次执行情况。
-    - -n 3 指定你需要记录的次数，当达到记录次数时 Arthas 会主动中断 tt 命令的记录过程，避免人工操作无法停止的情况。
-    - -s 筛选指定方法的调用信息
-    - -i 参数后边跟着对应的 INDEX 编号查看到它的详细信息
-    - -p 重做一次调用，通过  --replay-times 指定调用次数，通过 --replay-interval 指定多次调用间隔（单位ms，默认1000ms）
-
-##### 5、其他
-
-使用 > 将结果重写到日志文件，使用 & 指令命令是后台运行，session断开不影响任务执行（生命周期默认为1天）
-
-jobs ： 列出所有job
-
-kill ： 强制终止任务
-
-fg ： 将暂停的任务拉回到前台执行
-
-bg ： 将暂停的任务放到后台执行
-
-grep ： 搜索满足条件的结果
-
-plaintext ： 将命令的结果去除ANSI颜色
-
-wc ： 按行统计输出结果
-
-options ： 查看或设置 Arthas 全局开关
-
-profiler ： 使用 async-profiler 对应用采样，生成火焰图
-
-### 3.7、Java Mission Control
-
-#### 3.7.1、历史
-
-在Oracle收购Sun之前，Oracle的JRockit虚拟机提供了一款叫做JRockit Mission Control的虚拟机诊断工具。
-
-在Oracle收购Sun之后，Oracle公司同时拥有了Sun Hotspot和JRockit两款虚拟机。根据Oracle对于Java的战略，在今后的发展中，会将JRockit的优秀特性移植到Hotspot上。其中，一个重要的改进就是在Sun的JDK中加入了JRockit的支持。
-
-在Oracle JDK 7u40之后，Mission Control这款工具已经绑定在Oracle JDK中发布。
-
-自Java11开始，本节介绍的JFR已经开源。但在之前的Java版本，JFR属于Commercial Feature，需要通过Java虚拟机参数-XX:+UnlockCommercialFeatures开启。
-
-如果你有兴趣，可以查看OpenJDK的Mission Control项目。
-
-https://github.com/JDKMissionControl/jmc
-
-#### 3.7.2、启动
-
-Mission Control位于%JAVA_HOME%\bin\jmc.exe，打开这款软件。
-
-Oracle Java Mission Control 是什么？ Oracle Java Mission Control 是一个用于对 Java  应用程序进行管理、监视、概要分析和故障排除的工具套件。首次安装时，Java Mission Control 包括 JMX 控制台和 Java 飞行记录器。从  Mission Control 中可以轻松安装更多插件。 
-
-#### 3.7.3、概述
-
-Java Mission Control（简称JMC），Java官方提供的性能强劲的工具。是一个用于对Java应用程序进行管理、监视、概要分析和故障排除的工具套件。
-
-它包含一个GUI客户端，以及众多用来收集Java虚拟机性能数据的插件，如 JMX Console（能够访问用来存储虚拟机各个子系统运行数据的MXBeans），以及虚拟机内置的高效profiling工具Java Flight Recorder（JFR）。
-
-JMC的另一个优点就是：采用取样，而不是传统的代码植入技术，对应用性能的影响非常非常小，完全可以开着JMC来做压测（唯一影响可能是full gc多了）。
-
-#### 3.7.4、功能：实时监控JVM运行时的状态
-
-如果是远程服务器，使用前要开JMX。
-
-```bash
--Dcom.sun.management.jmxremote.port=${YOUR_PORT}
--Dcom.sun.management.jmxremote
--Dcom.sun.management.jmxremote.authenticate=false
--Dcom.sun.management.jmxremote.ssl=false
--Djava.rmi.server.hostname=${YOUR_HOST/IP}
-```
-
-文件=>连接=>创建新链接，填入上面JMX参数的host和port。
-
-#### 3.7.5、Java Flight Recorder
-
-略！
-
-### 3.8、其他工具
-
-#### 3.8.1、Flame Graphs（火焰图）
-
-#### 3.8.2、TProfiler
-
-使用JDK自身提供的工具进行JVM调优可以将TPS由2.5提升到20（提升了7倍），并准确定位系统瓶颈。
-
-系统瓶颈有：应用里静态对象不是太多、有大量的业务线程在频繁创建一些生命周期很长的临时对象，代码里有问题。
-
-那么，如何在海量业务代码里边准确定位这些性能代码？这里使用阿里开源工具TProfiler来定位这些性能代码，成功解决掉了GC过于频繁的性能瓶颈，并最终在上次优化的基础上将TPS再提升了4倍，即提升到100。
-
-- TProfiler 配置部署、远程操作、日志阅读都不太复杂，操作还是很简单的。但是其却是能够起到一针见血、立竿见影的效果，帮我们解决了GC过于频繁的性能瓶颈。
-- TProfiler最重要的特性就是<span style="color:blue;font-weight:bold;">能够统计出你指定时间段内JVM的top method，这些top method极有可能就是造成你JVM性能瓶颈的元凶。</span>这是其他大多数JVM调优工具所不具备的，包括JRockit Mission Control。JRockit首席开发者Marcus Hirt在其私人博客《Low Overhead Method Profiling with Java Mission Control）下的评论中曾明确指出JRMC并不支持TOP方法的统计。
-
-- TProfiler的下载： https://github.com/alibaba/TProfiler/wiki
-
-#### 3.8.3、Btrace
-
-#### 3.8.4、YourKit
-
-#### 3.8.5、JProbe
-
-#### 3.8.6、Spring Insight
 
 ## 4、JVM运行时参数
 
