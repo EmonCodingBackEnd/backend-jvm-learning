@@ -5,7 +5,15 @@ import java.util.ArrayList;
 /**
  * -Xms60m -Xmx60m -XX:SurvivorRatio=8 -verbose:gc
  * <p>
- * -Xms60m -Xmx60m -XX:SurvivorRatio=8 -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintHeapAtGC -Xloggc:d:\GCLogTest.log
+ * jdk1.8:
+ * -Xms60m -Xmx60m -XX:SurvivorRatio=8 -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintHeapAtGC -Xloggc:/Users/wenqiu/Misc/gc.log
+ * jdk1.8使用G1GC：
+ * -Xms60m -Xmx60m -XX:SurvivorRatio=8 -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC
+ * jdk1.8使用CMS：
+ * -Xms60m -Xmx60m -XX:SurvivorRatio=8 -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+UseConcMarkSweepGC
+ * <p>
+ * jdk11:
+ * -Xlog:gc*:file=/Users/wenqiu/Misc/gc11.log:tags,uptime,time,level
  */
 public class GCLogTest {
 
