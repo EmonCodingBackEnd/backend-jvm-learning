@@ -15000,167 +15000,85 @@ $ jcmd <PID>JFR.stop name=SomeLabel
 
 ​	64位机器上只支持Server模式的JVM，适用于需要大内存的应用程序，默认使用并行垃圾收集器。
 
-# 第24章 GC日志分析
+​	关于server和client的官网介绍为：
 
-# 第25章 OOM分类及解决方案
+​	https://docs.oracle.com/javase/8/docs/technotes/guides/vm/server-class.html
 
-# 第26章 性能优化案例
+### 23.1.2 非标准参数选项
 
-# 分割线========================
+​	我们知道JVM可以有不同的生产厂商，非标准参数的意思是并不保证所有JVM都对非标准参数进行实现，即只能被部分JVM识别且不保证向后兼容，功能相对来说也是比较稳定的，但是后续版本有可能会变更，参数以“-X”开头。可以用java -X来检索非标准参数，不能保证所有参数都可以被检索出来，例如其中就没有-Xcomp。下表列出了常见的非标准参数。
 
-![image-20230416121332413](images/image-20230416121332413.png)
+<div style="text-align:center;font-weight:bold;">非标准参数</div>
 
+![image-20241213085013746](images/image-20241213085013746.png)
 
+​	特别注意的是-Xint参数表示禁用JIT，所有的字节码都被解释执行，这个模式下系统启动最快，但是执行效率最低。-Xcomp表示JVM采用编译模式，代码执行很快，但是启动会比较慢。-Xmixed表示JVM采用混合模式，启动速度较快，让JIT根据程序运行的情况，对热点代码实行检测和编译。
 
+​	虽然-Xms、-Xmx和-Xss三个参数归属于-X参数选项，但是这三个参数的执行效果分别等同于非稳定参数中的-XX:InitialHeapSize、-XX:MaxHeapSize和-XX:ThreadStackSize。
 
+​	非标准选项：https://docs.oracle.com/javase/8/docs/technotes/tools/unix/java.html#BABHDABI
 
+| 参数选项名                                                   | 含义                                                         |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| <span style="color:red;font-weight:bold;">-Xmixed</span>     | 混合模式执行 (默认)                                          |
+| <span style="color:red;font-weight:bold;">-Xint</span>       | 仅解释模式执行                                               |
+| <span style="color:red;font-weight:bold;">-Xcomp</span>      | 仅采用即时编译器模式                                         |
+| -Xbootclasspath:<用 ; 分隔的目录和 zip/jar 文件>             | 设置搜索路径以引导类和资源                                   |
+| -Xbootclasspath/a:<用 ; 分隔的目录和 zip/jar 文件>           | 附加在引导类路径末尾                                         |
+| -Xbootclasspath/p:<用 ; 分隔的目录和 zip/jar 文件>           | 置于引导类路径之前                                           |
+| -Xdiag                                                       | 显示附加诊断消息                                             |
+| -Xnoclassgc                                                  | 禁用类垃圾收集                                               |
+| -Xincgc                                                      | 启用增量垃圾收集                                             |
+| -Xloggc:<file>                                               | 将 GC 状态记录在文件中 (带时间戳)                            |
+| -Xbatch                                                      | 禁用后台编译                                                 |
+| <span style="color:blue;font-weight:bold;">`-Xms<size>`</span> | 设置初始 Java 堆大小，等价于 -XX:InitialHeapSize             |
+| <span style="color:blue;font-weight:bold;">`-Xmx<size>`</span> | 设置最大 Java 堆大小，等价于 -XX:MaxHeapSize                 |
+| <span style="color:blue;font-weight:bold;">`-Xss<size>`</span> | 设置 Java 线程堆栈大小，等价于 -XX:ThreadStackSize           |
+| <span style="color:blue;font-weight:bold;">`-Xmn<size>`</span> | 设置新生代内存，比-XX:NewRatio优先级高，等价于 -XX:NewSize 和 -XX:MaxNewSize |
+| -Xprof                                                       | 输出 cpu 配置文件数据                                        |
+| -Xfuture                                                     | 启用最严格的检查, 预期将来的默认值                           |
+| -Xrs                                                         | 减少 Java/VM 对操作系统信号的使用 (请参阅文档)               |
+| -Xcheck:jni                                                  | 对 JNI 函数执行其他检查                                      |
+| -Xshare:off                                                  | 不尝试使用共享类数据                                         |
+| -Xshare:auto                                                 | 在可能的情况下使用共享类数据 (默认)                          |
+| -Xshare:on                                                   | 要求使用共享类数据, 否则将失败。                             |
+| -XshowSettings                                               | 显示所有设置并继续                                           |
+| -XshowSettings:all                                           | 显示所有设置并继续                                           |
+| -XshowSettings:vm                                            | 显示所有与 vm 相关的设置并继续                               |
+| -XshowSettings:properties                                    | 显示所有属性设置并继续                                       |
+| -XshowSettings:locale                                        | 显示所有与区域设置相关的设置并继续                           |
 
+### 23.1.3 非稳定参数选项
 
+​	非稳定参数选项以-XX开头，也属于非标准参数，相对不稳定，在JVM中是不健壮的，也可能会突然直接取消某项参数，主要用于JVM调优和调试。但是这些参数中有很多参数对于JVM调优很有用处，所以也是使用最多的参数选项。
 
+​	-XX参数又分为布尔类型参数和非布尔类型参数。布尔类型的格式为`-XX:+/-<option>`,`-XX:+<option>`表示启用option,`-XX:-<option>`表示禁用option。例如-XX:+UseParallelGC表示开启ParallelGC垃圾收集器，-XX:-UseParallelGC表示关闭ParallelGC垃圾收集器，有些参数是默认开启的，调优的时候可以考虑关闭某些参数。
 
-![image-20240725124156003](images/image-20240725124156003.png)
+​	非布尔类型的参数也可以理解为Key-Value型的参数，可以分为数值类型和非数值类型。数值类型格式为`-XX:<option>=<number>`,number可以带上单位（k、K表示千字节，m、M表示兆，或者使用更大的内存单位g、G），例如-XX:NewSize=1024m表示设置新生代初始大小为1024MB。非数值类型格式为`-XX:<option>=<String>`，例如-XX:HeapDumpPath=/usr/local/heapdump.hprof用来指定heap转存文件的存储路径。
 
-### 堆（Heap）
+​	通过“java -XX:+PrintFlagsFinal”命令可以查看所有的-XX参数，如下图所示，篇幅原因截取部分截图。
 
-#### 栈上分配、TLAB、PLAB
+<div style="text-align:center;font-weight:bold;">XX参数选项</div>
 
-![img](images/345fb491ba0a490ebd96d65c20d3a59e.png)
+![image-20241213085914242](images/image-20241213085914242.png)
 
+​	上图倒数第二列参数的取值有多种，如下所示。
 
+(1)product表示该类型参数是官方支持的，属于JVM内部选项。
+(2)rw表示可动态写入。
+(3)C1表示Client JIT编译器。
+(4)C2表示Server JIT编译器。
+(5)pd表示平台独立。
+(6)lp64表示仅支持64位JVM。
+(7)manageable表示可以运行时修改。
+(8)diagnostic表示用于JVM调试。
+(9)experimental表示非官方支持的参数。
 
-# 二、垃圾回收算法与垃圾回收器（<span style="color:red;font-weight:bold;">上篇</span>）
+​	默认不包含diagnostic和experimental两种类型，想要包含该类型的参数可以配合参数-XX:+UnlockDiagnosticVMOptions和-XX:+UnlockExperimentalVMOptions使用，例如java -XX:+PrintFlagsFinal -XX:+UnlockDiagnosticVMOptions命令结果如下（部分结果），包含了diagnostic类型的参数。同理可以添加-XX:+UnlockExperimentalVMOptions参数用于包含experimental类型的参数，不再演示。
 
-## 
+![image-20241213090300537](images/image-20241213090300537.png)
 
-![image-20240824164900828](images/image-20240824164900828.png)
 
-### 6.4、常用的显示GC日志的参数
-
-通过阅读GC日志，我们可以了解Java虚拟机内存分配与回收策略。
-
-内存分配与垃圾回收的参数列表：
-
-<span style="color:blue;font-weight:bold;">-XX:+PrintGC</span>
-
-输出GC日志。类似： -verbose:gc
-
-<span style="color:blue;font-weight:bold;">-XX:+PrintGCDetails</span>
-
-输出GC的详细日志
-
-<span style="color:blue;font-weight:bold;">-XX:+PrintGCTimeStamps</span>
-
-输出GC的时间戳（以基准时间的形式）
-
-<span style="color:blue;font-weight:bold;">-XX:+PrintGCDateStamps</span>
-
-输出GC的时间戳（以日期的形式，如2013-05-04T21:55:59.235+0800）
-
-<span style="color:blue;font-weight:bold;">-XX:+PrintHeapAtGC</span>
-
-在进行GC的前后打印出堆的信息
-
-<span style="color:blue;font-weight:bold;">-Xloggc:../logs/gc.log</span>
-
-日志文件的输出路径
-
-![image-20240914123906092](images/image-20240914123906092.png)
-
-
-
-![image-20240914123922369](images/image-20240914123922369.png)
-
-
-
-![image-20240914123939708](images/image-20240914123939708.png)
-
-
-
-![image-20240914125730379](images/image-20240914125730379.png)
-
-
-
-![image-20240914125811912](images/image-20240914125811912.png)
-
-
-
-![image-20240914130024251](images/image-20240914130024251.png)
-
-
-
-![image-20240914130216234](images/image-20240914130216234.png)
-
-
-
-![image-20240914130228189](images/image-20240914130228189.png)
-
-# 五、性能监控（命令行、可视化工具）（<span style="color:red;font-weight:bold;">下篇</span>）
-
-## 4、JVM运行时参数
-
-### 4.1、JVM参数选项类
-
-#### 类型一：标准参数选项
-
-- 特点：
-  - 比较稳定，后续版本基本不会变化；
-  - 以 - 开头
-- 各种选项：运行java或者java -help可以看到所有的标准选项
-- 补充内容：-server 与 -client
-
-Hotspot JVM有两种模式，分别是 server 和 client，分别通过 -server 和 -client 模式设置
-
-1. 在32位Windows系统上，默认使用Client类型的JVM。要想使用 Server 模式，则机器配置至少有2个以上的CPU和2G以上的物理内存。client模式适用于对内存要求较小的桌面应用程序，默认使用Serial串行垃圾收集器。
-2. 64位机器上只支持server模式的JVM，适用于需要大内存的应用程序，默认使用并行垃圾收集器。
-
-关于server和client的官网介绍为：
-
-https://docs.oracle.com/javase/8/docs/technotes/guides/vm/server-class.html
-
-#### 类型二：-X参数选项
-
-非标准选项：https://docs.oracle.com/javase/8/docs/technotes/tools/unix/java.html#BABHDABI
-
-- 特点：
-  - 非标准化参数
-  - 功能还是比较稳定的。但官方说后续版本可能会变更
-  - 以 -X 开头
-  
-- 各种选项： 运行 java -X 命令可以看到所有的X选项
-
-  | 参数选项名                                                   | 含义                                                         |
-  | ------------------------------------------------------------ | ------------------------------------------------------------ |
-  | <span style="color:red;font-weight:bold;">-Xmixed</span>     | 混合模式执行 (默认)                                          |
-  | <span style="color:red;font-weight:bold;">-Xint</span>       | 仅解释模式执行                                               |
-  | <span style="color:red;font-weight:bold;">-Xcomp</span>      | 仅采用即时编译器模式                                         |
-  | -Xbootclasspath:<用 ; 分隔的目录和 zip/jar 文件>             | 设置搜索路径以引导类和资源                                   |
-  | -Xbootclasspath/a:<用 ; 分隔的目录和 zip/jar 文件>           | 附加在引导类路径末尾                                         |
-  | -Xbootclasspath/p:<用 ; 分隔的目录和 zip/jar 文件>           | 置于引导类路径之前                                           |
-  | -Xdiag                                                       | 显示附加诊断消息                                             |
-  | -Xnoclassgc                                                  | 禁用类垃圾收集                                               |
-  | -Xincgc                                                      | 启用增量垃圾收集                                             |
-  | -Xloggc:<file>                                               | 将 GC 状态记录在文件中 (带时间戳)                            |
-  | -Xbatch                                                      | 禁用后台编译                                                 |
-  | <span style="color:blue;font-weight:bold;">`-Xms<size>`</span> | 设置初始 Java 堆大小，等价于 -XX:InitialHeapSize             |
-  | <span style="color:blue;font-weight:bold;">`-Xmx<size>`</span> | 设置最大 Java 堆大小，等价于 -XX:MaxHeapSize                 |
-  | <span style="color:blue;font-weight:bold;">`-Xss<size>`</span> | 设置 Java 线程堆栈大小，等价于 -XX:ThreadStackSize           |
-  | <span style="color:blue;font-weight:bold;">`-Xmn<size>`</span> | 设置新生代内存，比-XX:NewRatio优先级高，等价于 -XX:NewSize 和 -XX:MaxNewSize |
-  | -Xprof                                                       | 输出 cpu 配置文件数据                                        |
-  | -Xfuture                                                     | 启用最严格的检查, 预期将来的默认值                           |
-  | -Xrs                                                         | 减少 Java/VM 对操作系统信号的使用 (请参阅文档)               |
-  | -Xcheck:jni                                                  | 对 JNI 函数执行其他检查                                      |
-  | -Xshare:off                                                  | 不尝试使用共享类数据                                         |
-  | -Xshare:auto                                                 | 在可能的情况下使用共享类数据 (默认)                          |
-  | -Xshare:on                                                   | 要求使用共享类数据, 否则将失败。                             |
-  | -XshowSettings                                               | 显示所有设置并继续                                           |
-  | -XshowSettings:all                                           | 显示所有设置并继续                                           |
-  | -XshowSettings:vm                                            | 显示所有与 vm 相关的设置并继续                               |
-  | -XshowSettings:properties                                    | 显示所有属性设置并继续                                       |
-  | -XshowSettings:locale                                        | 显示所有与区域设置相关的设置并继续                           |
-
-  -X 选项是非标准选项, 如有更改, 恕不另行通知。
-
-#### 类型三：-XX参数选项
 
 - 特点：
 
@@ -15201,45 +15119,79 @@ https://docs.oracle.com/javase/8/docs/technotes/guides/vm/server-class.html
     - 默认不包括 Diagnostic 和 Experimental 的参数
     - 可以配合 -XX:+UnlockDiagnosticVMOptions 和 -XX:UnlockExperimentalVMOption 使用
 
-### 4.2、添加JVM参数选项
+## 23.2 添加JVM参数的方式
 
-#### 4.2.1、Eclipse
+​	在工作中经常需要配置JVM参数，一般有以下几种方式。
 
-#### 4.2.2、IDEA
+### 23.2.1 Eclipse界面配置
 
-#### 4.2.3、运行jar包
+​	单击鼠标右键选中目标工程，选择“Run As”→“Run Configurations”→“Arguments”选项。在VM arguments里面填入需要的JVM参数即可。例如填入-Xmx256m，这样就可以设置运行时最大内存为256MB,Eclipse配置参数如下图所示。
+
+<div style="text-align:center;font-weight:bold;">EclipseJVM参数配置</div>
+
+<img src="images/image-20241213090552821.png" alt="image-20241213090552821" style="zoom:50%;" />
+
+### 23.2.2 IDEA界面配置
+
+​	鼠标右键选中目标工程，选择“Run”→“Edit Configurations”选项，如图23-3所示。选中要添加JVM参数的Application，然后在Configuration里面的VM options中输入想要添加的JVM参数即可，如图23-4所示，例如填入-Xmx256m，这样就可以设置运行时最大内存为256MB。
+
+<div style="text-align:center;font-weight:bold;">IDEA参赛配置1</div>
+
+<img src="images/image-20241213091001601.png" alt="image-20241213091001601" style="zoom:50%;" />
+
+<div style="text-align:center;font-weight:bold;">IDEA参赛配置2</div>
+
+<img src="images/image-20241213091707747.png" alt="image-20241213091707747" style="zoom:50%;" />
+
+### 23.2.3 通过java命令配置
+
+​	通过java命令运行class或者jar包的时候也可以添加JVM参数，一般多用于工程测试，如下所示。
 
 ```bash
-java -Xms50m -Xmx50m -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -jar demo.jar
+# 运行jar包时添加JVM参赛
+% java -Xms128m -Xmx256m -jar demo.jar
+% java -Xms50m -Xmx50m -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -jar demo.jar
+# 运行类的字节码文件时添加JVM参赛
+% java -Xms128m -Xmx256m 类名
 ```
 
-#### 4.2.4、通过Tomcat运行war包
+### 23.2.4 通过web服务器配置
 
-Linux系统下可以在tomcat/bin/catalina.sh中添加类似如下配置：
+​	Linux系统下可以在tomcat/bin/catalina.sh中添加如下JVM配置。
 
+```bash
 JAVA_OPTS="-Xms512M -Xmx1024M"
+```
 
-Windows系统下在catalina.bat中添加类似如下配置：
+​	Windows系统下可以在catalina.bat中添加如下配置。
 
-set "JAVA_OPTS=-Xmx512M -Xmx1024M"
+```bash
+set "JAVA_OPTS=-Xms512M -Xmx1024M"
+```
 
-#### 4.2.5、程序运行过程中
+### 22.2.5 通过jinfo命令配置
 
-- 使用`jinfo -flag <name>=<value> <pid>`设置非Boolean类型参数
-- 使用 `jinfo -flag [+|-]name <pid>` 设置Boolean类型参数
+​	jinfo命令在第20章已经详细讲过，这里不再赘述。
 
-### 4.3、常用的JVM参数选项
+## 23.3 常用JVM参数选项
 
-#### 4.3.1、打印设置的XX选项及值
+​	JVM参数选项那么多，在工作中有很多参数是很少用到的，这里汇总了几大常用的参数分类，如下所示。
 
-- <span style="color:blue;font-weight:bold;">-XX:+PrintCommandLineFlag</span> ： 可以让在程序运行前打印出用户手动设置或者JVM自动设置的XX选项。
-- <span style="color:blue;font-weight:bold;">-XX:+PrintFlagsInitial</span> ： 表示打印出所有XX选项的默认值
-- <span style="color:blue;font-weight:bold;">-XX:+PrintFlagsFinal</span> ： 表示打印出XX选项在运行程序时生效的值
-- <span style="color:blue;font-weight:bold;">-XX:+PrintVMOptions</span> ： 打印JVM的参数
+### 23.3.1 打印设置的XX选项及值
 
+​	输出设置的-XX参数以及参数值的参数选项如下表所示。
 
+<div style="text-align:center;font-weight:bold;">输出设置的-XX参数以及参数值的参数选项</div>
 
-#### 4.3.2、堆、栈、方法区等内存大小设置
+<img src="images/image-20241213112458475.png" alt="image-20241213112458475" style="zoom:50%;" />
+
+### 23.3.2 堆、栈、方法区等内存大小设置
+
+​	堆、栈、方法区等内存大小设置的参数选项如下表所示。
+
+<div style="text-align:center;font-weight:bold;">堆、栈、方法区等内存大小设置的参数选项</div>
+
+<img src="images/image-20241213113117276.png" alt="image-20241213113117276" style="zoom:50%;" />
 
 - 堆内存参数
 
@@ -15260,9 +15212,9 @@ set "JAVA_OPTS=-Xmx512M -Xmx1024M"
 
 - 栈
 
-  | 参数     | 作用                                                   |
-  | -------- | ------------------------------------------------------ |
-  | -Xss128k | 设置每个线程的栈大小为128k，等价于 -XX:ThreadStackSize |
+| 参数     | 作用                                                   |
+| -------- | ------------------------------------------------------ |
+| -Xss128k | 设置每个线程的栈大小为128k，等价于 -XX:ThreadStackSize |
 
 - 方法区
 
@@ -15289,22 +15241,21 @@ set "JAVA_OPTS=-Xmx512M -Xmx1024M"
     | ----------------------- | ------------ |
     | -XX:MaxDirectMemorySize | 直接内存大小 |
 
-#### 4.3.3、OutofMemory相关的选项
+### 23.3.3 OutOfMemory相关选项
 
-- <span style="color:blue;font-weight:bold;">-XX:+HeapDumpOnOutOfMemoryError</span> 表示在内存出现OOM的时候，把heap转存（Dump）到文件以便后续分析。
-- <span style="color:blue;font-weight:bold;">-XX:+HeapDumpBeforeFullGC</span> 表示在出现FullGC之前，生成Heap转储文件
-- <span style="color:blue;font-weight:bold;">-XX:HeapDumpPath=<path></span> 指定heap转存文件的存储路径
-- <span style="color:blue;font-weight:bold;">-XX:OnOutOfMemoryError</span> 指定一个可行性程序或者脚本的路径，当发生OOM的时候，去执行这个脚本
+​	OutOfMemory相关的参数选项如下表所示。
 
-比如，对OnOutOfMemoryError的运维处理。
+<div style="text-align:center;font-weight:bold;">OutOfMemory相关的参数选项</div>
 
-已部署在linux系统/opt/Server目录下的Server.jar为例
+<img src="images/image-20241213113330989.png" alt="image-20241213113330989" style="zoom:50%;" />
 
-1. 在run.sh启动脚本中添加jvm参数：
+​	XX:OnOutOfMemoryError表示当发生内存溢出的时候，还可以让JVM调用任一个shell脚本。大多数时候，内存溢出并不会导致整个应用都挂掉，但是最好还是把应用重启一下，因为一旦发生了内存溢出，可能会让应用处于一种不稳定的状态，一个不稳定的应用可能会提供错误的响应。例如使用以下命令。
 
+```bash
 -XX:OnOutOfMemoryError=/opt/Server/restart.sh
+```
 
-2. restart.sh脚本
+​	当给JVM传递上述参数的时候，如果发生了内存溢出，JVM会调用/opt/Server/restart.sh这个脚本，在这个脚本中可以去用优雅的办法来重启应用。restart.sh脚本如下所示。
 
 Linux环境：
 
@@ -15324,7 +15275,41 @@ cd D:\Server
 start run.bat
 ```
 
-#### 4.3.4、垃圾收集器相关选项
+### 23.3.4 垃圾收集器相关选项
+
+​	垃圾收集器相关的参数选项因垃圾收集器的不同而不同，关于垃圾收集器的分类以及配合使用，在第16章有详细的讲解。使用-XX:+PrintCommandLineFlags查看命令行相关参数，从中可以查看到当前系统使用的垃圾收集器，也可以使用命令行指令jinfo查看。
+
+​	Serial收集器作为HotSpot中Client模式下的默认新生代垃圾收集器。Serial Old收集器是运行在Client模式下默认的老年代的垃圾收集器。-XX:+UseSerialGC参数可以指定新生代和老年代都使用串行收集器，表示新生代用Serial GC，且老年代用Serial Old收集器。可以获得最高的单线程收集效率。现在已经很少使用Serial收集器了，本书也不再赘述。
+
+​	ParNew收集器可以使用-XX:+UseParNewGC参数指定。它表示新生代使用并行收集器，不影响老年代。
+
+​	Parallel收集器的相关JVM参数选项如下表所示。
+
+<div style="text-align:center;font-weight:bold;">Parallel收集器的相关JVM参数选项</div>
+
+<img src="images/image-20241213114236478.png" alt="image-20241213114236478" style="zoom:50%;" />
+
+​	CMS收集器的相关JVM参数选项如下表所示。
+
+<div style="text-align:center;font-weight:bold;">CMS收集器的相关JVM参数选项</div>
+
+<img src="images/image-20241213114802306.png" alt="image-20241213114802306" style="zoom:50%;" />
+
+​	需要注意的是JDK 9新特性中CMS被标记为Deprecate了，如果对JDK 9及以上版本的HotSpot虚拟机使用参数-XX:+UseConcMarkSweepGC来开启CMS收集器的话，用户会收到一个警告信息，提示CMS未来将会被废弃。JDK 14新特性中删除了CMS垃圾收集器，如果在JDK 14中使用-XX:+UseConcMarkSweepGC的话，JVM不会报错，只是给出一个warning信息，但是不会exit。JVM会自动回退以默认GC方式启动JVM。
+
+​	G1收集器的相关JVM参数选项如下表所示。
+
+<div style="text-align:center;font-weight:bold;">G1收集器的相关JVM参数选项</div>
+
+<img src="images/image-20241213115516875.png" alt="image-20241213115516875" style="zoom:50%;" />
+
+​	G1收集器主要涉及Mixed GC,Mixed GC会回收新生代和部分老年代，G1关于Mixed GC调优常用参数选项如下表所示。
+
+<div style="text-align:center;font-weight:bold;">G1关于Mixed GC调优常用参数选项</div>
+
+![image-20241213115754048](images/image-20241213115754048.png)
+
+
 
 - 查看默认垃圾收集器
 
@@ -15460,9 +15445,15 @@ start run.bat
   1. 没有最好的收集器，更没有万能的收集器。
   2. 调优永远是针对特定场景、特定需求，不存在一劳永逸的收集器。
 
-#### 4.3.5、GC日志相关选项
+### 23.3.5 GC日志相关选项
 
-##### 常用参数
+​	GC日志相关的参数选项如下表所示。
+
+<div style="text-align:center;font-weight:bold;">GC日志相关的参数选项</div>
+
+<img src="images/image-20241213120426484.png" alt="image-20241213120426484" style="zoom:50%;" />
+
+
 
 - <span style="color:blue;font-weight:bold;">-verbose:gc</span> ： 输出gc日志信息，默认输出到标准输出。<span style="color:orange;font-weight:bold;">可独立使用</span>
 - <span style="color:blue;font-weight:bold;">-XX:+PrintGC</span> 等同于 -verbose:gc ；表示打开简化的GC日志。<span style="color:orange;font-weight:bold;">可独立使用</span>
@@ -15472,7 +15463,7 @@ start run.bat
 - <span style="color:blue;font-weight:bold;">-XX:+PrintHeapAtGC</span> ： 每一次GC前和GC后，都打印堆信息。<span style="color:orange;font-weight:bold;">**可独立使用**</span>
 - <span style="color:blue;font-weight:bold;">-Xloggc:<file></span> ： 把GC日志写入到一个文件中去，而不是打印到标准输出中。<span style="color:orange;font-weight:bold;">需要配合-XX:+PrintGCDetails使用</span>
 
-##### 其他参数
+
 
 - <span style="color:blue;font-weight:bold;">-XX:+TraceClassLoading</span> ： 监控类的加载
 - <span style="color:blue;font-weight:bold;">-XX:+PrintGCApplicationStoppedTime</span> ： 打印GC时线程的停顿时间
@@ -15483,7 +15474,15 @@ start run.bat
 - <span style="color:blue;font-weight:bold;">-XX:NumberOfGCLogFiles=1</span> ： GC日志文件的循环数量
 - <span style="color:blue;font-weight:bold;">-XX:GCLogFileSize=1M</span> ： 控制GC日志文件的大小
 
-#### 4.3.6、其他参数
+### 23.3.6 其他参数
+
+​	其他常用的参数选项如下表所示。
+
+<div style="text-align:center;font-weight:bold;">其他常用的参数选项</div>
+
+<img src="images/image-20241213120333978.png" alt="image-20241213120333978" style="zoom:50%;" />
+
+
 
 - <span style="color:blue;font-weight:bold;">-XX:+DisableExplicitGC</span> ： 禁止hotspot执行System.gc()，默认禁用。
 - <span style="color:blue;font-weight:bold;">-XX:ReservedCodeCacheSize=<n>[g|m|k]、-XX:InitialCodeCacheSize=<n>[g|m|k]</span> ： 指定代码缓存的大小
@@ -15495,13 +15494,22 @@ start run.bat
 - <span style="color:blue;font-weight:bold;">-XX:+PrintTLAB</span> ： 打印TLAB的使用情况
 - <span style="color:blue;font-weight:bold;">-XX:TLABSize</span> ： 设置TLAB大小
 
-### 4.4、通过Java代码获取JVM参数
+## 23.4 通过Java代码获取JVM参数
 
-​	Java提供了java.lang.management包用于监视和管理Java虚拟机和Java运行时中的其他组件，它允许本地和远程监控和管理运行的Java虚拟机。其中ManagementFactory这个类还是挺常用的。另外还有Runtime类也可以获取一些内存、CPU核数等相关的数据。
+​	Java提供了java.lang.management包用于监视和管理JVM和Java运行时中的其他组件，它允许本地和远程监控和管理运行的JVM，会经常使用到其中的ManagementFactory类。另外还有Runtime类也可以获取一些内存、CPU核数等相关的数据。通过这些API可以监控我们的应用服务器的堆内存使用情况，也可以设置一些阈值进行报警等处理，如下代码演示了Java代码获取应用的内存使用情况。
 
-​	通过这些API可以监控我们的应用服务器的堆内存使用情况，设置一些阈值进行报警等处理。
+<span style="color:#40E0D0;">案例1：获取JVM内存使用情况</span>
+
+- 代码
 
 ```java
+package com.coding.jvm07.vmoptions;
+
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryPoolMXBean;
+import java.lang.management.MemoryUsage;
+
 /**
  * 监控我们的应用服务器的堆内存使用情况，设置一些阈值进行报警等处理。
  */
@@ -15528,21 +15536,307 @@ public class MemoryMonitor {
         System.out.println("最大可用总堆内存maxMemory:" + Runtime.getRuntime().maxMemory() / 1024 / 1024 + "m");
     }
 }
+
 ```
 
+​	运行结果如下，可以看到堆内存的各项信息。
 
+![image-20241213123119426](images/image-20241213123119426.png)
+
+
+
+# 第24章 GC日志分析
+
+​	GC日志是JVM产生的一种描述性的文本日志。就像开发Java程序需要输出日志一样，JVM通过GC日志来描述垃圾收集的情况。通过GC日志，我们能直观地看到内存清理的工作过程，了解垃圾收集的行为，比如何时在新生代执行垃圾收集，何时在老年代执行垃圾收集。本章将详细讲解如何分析GC日志。
+
+## 24.1 概述
+
+​	GC日志主要用于快速定位系统潜在的内存故障和性能瓶颈，通过阅读GC日志，我们可以了解JVM的内存分配与回收策略。GC日志根据垃圾收集器分类可以分为Parallel垃圾收集器日志、G1垃圾收集器日志和CMS垃圾收集器日志。第7章讲解堆的时候，垃圾收集分为部分收集和整堆收集，所以也可以把GC日志分为Minor GC日志、Major GC日志和Full GC日志。下面开始解析不同垃圾收集器的GC日志。
+
+## 24.2 生成GC日志
+
+​	解析日志之前，我们需要先生成日志，打印内存分配与垃圾收集日志信息的相关参数如下，更多关于GC日志参数见第23章表<span style="color:blue;font-weight:bold;">GC日志相关的参数选项</span>。
+
+​	1、-XX:+PrintGC
+
+​	该参数表示输出GC日志，和参数-verbose:gc效果一样。
+
+​	2、-XX:+PrintGCDetails
+
+​	该参数表示输出GC的详细日志。
+
+​	3、-XX:+PrintGCTimeStamps
+
+​	该参数表示输出GC的时间戳（以基准时间的形式）
+
+​	4、-XX:+PrintGCDateStamps
+
+​	该参数表示输出GC的时间戳（以日期的形式，如2013-05-04T21:53:59.234+0800）
+
+​	5、-XX:+PrintHeapAtGC
+
+​	该参数表示在进行GC的前后打印出堆的信息。
+
+​	6、-Xloggc:../logs/gc.log
+
+​	该参数表示日志文件的输出路径。
+
+​	使用如下代码演示不同的GC日志参数打印出来的日志效果。
+
+<span style="color:#40E0D0;">案例1：GC日志演示</span>
+
+- 代码
+
+```java
+package com.coding.jvm07.vmoptions;
+
+import java.util.ArrayList;
+
+/**
+ * -Xms60m -Xmx60m -XX:SurvivorRatio=8 -verbose:gc
+ * <p>
+ * -Xms60m -Xmx60m -XX:SurvivorRatio=8 -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -XX:+PrintHeapAtGC -Xloggc:d:\GCLogTest.log
+ */
+public class GCLogTest {
+
+    public static void main(String[] args) {
+        ArrayList<byte[]> list = new ArrayList<>();
+
+        for (int i = 0; i < 600; i++) {
+            byte[] arr = new byte[1024 * 100]; // 100KB
+            list.add(arr);
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+```
+
+​	配置JVM参数如下。
+
+```bash
+-Xms60m -Xmx60m -XX:SurvivorRatio=8
+```
+
+​	(1)增加输出GC日志参数如下。
+
+```bash
+-verbose:gc
+```
+
+​	这个参数只会显示总的GC堆的变化，结果如下。
+
+```bash
+[GC (Allocation Failure)  17353K->6841K(63488K), 0.0054519 secs]
+[GC (Allocation Failure)  24208K->23716K(63488K), 0.0067550 secs]
+[GC (Allocation Failure)  41118K->40566K(63488K), 0.0063732 secs]
+[Full GC (Ergonomics)  40566K->40380K(63488K), 0.0179042 secs]
+[Full GC (Ergonomics)  57710K->57374K(63488K), 0.0204342 secs]
+[Full GC (Ergonomics)  61157K->60606K(63488K), 0.0217548 secs]
+```
+
+​	(2)在控制台输出GC日志详情命令如下。
+
+```bash
+-verbose:gc
+-XX:+PrintGCDetails
+```
+
+​	输出日志信息如下。
+
+```bash
+[GC (Allocation Failure) [PSYoungGen: 17353K->2032K(19456K)] 17353K->6804K(63488K), 0.0080861 secs] [Times: user=0.01 sys=0.01, real=0.01 secs] 
+[GC (Allocation Failure) [PSYoungGen: 19399K->2028K(19456K)] 24172K->23711K(63488K), 0.0057697 secs] [Times: user=0.00 sys=0.01, real=0.01 secs] 
+[GC (Allocation Failure) [PSYoungGen: 19430K->2016K(19456K)] 41113K->40506K(63488K), 0.0077306 secs] [Times: user=0.01 sys=0.01, real=0.01 secs] 
+[Full GC (Ergonomics) [PSYoungGen: 2016K->0K(19456K)] [ParOldGen: 38489K->40379K(44032K)] 40506K->40379K(63488K), [Metaspace: 8663K->8663K(1056768K)], 0.0215998 secs] [Times: user=0.09 sys=0.01, real=0.02 secs] 
+[Full GC (Ergonomics) [PSYoungGen: 17329K->13602K(19456K)] [ParOldGen: 40379K->43772K(44032K)] 57709K->57374K(63488K), [Metaspace: 8672K->8672K(1056768K)], 0.0215331 secs] [Times: user=0.05 sys=0.01, real=0.02 secs] 
+[Full GC (Ergonomics) [PSYoungGen: 17323K->17103K(19456K)] [ParOldGen: 43772K->43502K(44032K)] 61096K->60606K(63488K), [Metaspace: 8695K->8644K(1056768K)], 0.0231095 secs] [Times: user=0.06 sys=0.01, real=0.02 secs]
+```
+
+​	可以发现较之前的日志信息更加详细了，可以明确看到每个区域的内存变化，这使得对日志的分析更加精确了。
+
+​	(3)增加GC日志打印时间命令如下。
+
+```bash
+-verbose:gc
+-XX:+PrintGCDetails
+-XX:+PrintGCTimeStamps
+-XX:+PrintGCDateStamps
+```
+
+​	输出日志信息如下。
+
+```bash
+2024-12-13T16:55:14.247-0800: 1.198: [GC (Allocation Failure) [PSYoungGen: 17353K->2024K(19456K)] 17353K->6872K(63488K), 0.0071370 secs] [Times: user=0.02 sys=0.01, real=0.01 secs] 
+2024-12-13T16:55:18.242-0800: 5.194: [GC (Allocation Failure) [PSYoungGen: 19391K->2024K(19456K)] 24239K->23787K(63488K), 0.0063350 secs] [Times: user=0.01 sys=0.01, real=0.00 secs] 
+2024-12-13T16:55:22.309-0800: 9.261: [GC (Allocation Failure) [PSYoungGen: 19365K->2044K(19456K)] 41128K->40606K(63488K), 0.0074474 secs] [Times: user=0.01 sys=0.02, real=0.01 secs] 
+2024-12-13T16:55:22.317-0800: 9.268: [Full GC (Ergonomics) [PSYoungGen: 2044K->0K(19456K)] [ParOldGen: 38561K->40382K(44032K)] 40606K->40382K(63488K), [Metaspace: 8663K->8663K(1056768K)], 0.0160206 secs] [Times: user=0.12 sys=0.01, real=0.02 secs] 
+2024-12-13T16:55:26.404-0800: 13.356: [Full GC (Ergonomics) [PSYoungGen: 17330K->13602K(19456K)] [ParOldGen: 40382K->43772K(44032K)] 57712K->57374K(63488K), [Metaspace: 8672K->8672K(1056768K)], 0.0232205 secs] [Times: user=0.14 sys=0.02, real=0.02 secs] 
+2024-12-13T16:55:27.298-0800: 14.249: [Full GC (Ergonomics) [PSYoungGen: 17384K->17203K(19456K)] [ParOldGen: 43772K->43502K(44032K)] 61157K->60706K(63488K), [Metaspace: 8695K->8644K(1056768K)], 0.0093000 secs] [Times: user=0.08 sys=0.00, real=0.01 secs] 
+2024-12-13T16:55:27.357-0800: 14.309: [Full GC (Ergonomics) [PSYoungGen: 17408K->17403K(19456K)] [ParOldGen: 43502K->43502K(44032K)] 60910K->60906K(63488K), [Metaspace: 8646K->8646K(1056768K)], 0.0038409 secs] [Times: user=0.02 sys=0.00, real=0.01 secs]
+```
+
+​	可以看到日志信息中带上了日期，方便在生产环境中根据日期去定位GC日志2022-03-25T16:14:53.423-0800表示的日志打印时间，该信息是参数“-XX:+PrintGCDateStamps”起的作用；后面的6.948表示虚拟机启动以来到目前打印日志经历的时间，该信息由参数“-XX:+PrintGCTimeStamps”起作用。
+
+​	(4)在生产环境中，一般都会把日志存放到某个文件中，如果想要达到这一效果可以使用下面的参数。
+
+```bash
+-Xloggc:/Users/wenqiu/Misc/gc.log
+```
+
+## 24.3 Parallel垃圾收集器日志解析
+
+### 24.3.1 Minor GC
+
+​	下面是一段Parallel垃圾收集器在新生代产生的Minor GC日志，接下来逐步展开解析。
+
+```bash
+2024-12-13T23:44:52.839-0800: 1.217: [GC (Allocation Failure) [PSYoungGen: 17353K->2044K(19456K)] 17353K->6868K(63488K), 0.0071326 secs] [Times: user=0.01 sys=0.01, real=0.01 secs] 
+```
+
+​	日志解析如下表所示。
+
+<div style="text-align:center;font-weight:bold;">Parallel垃圾收集器Minor GC日志解析</div>
+
+<img src="images/image-20241215113118031.png" alt="image-20241215113118031" style="zoom:50%;" />
+
+### 24.3.2 FULL GC
+
+​	下面解析一段Parallel垃圾收集器产生的FULL GC日志。
+
+```bash
+2024-12-13T23:45:00.855-0800: 9.232: [Full GC (Ergonomics) [PSYoungGen: 2044K->0K(19456K)] [ParOldGen: 38453K->40380K(44032K)] 40498K->40380K(63488K), [Metaspace: 8663K->8663K(1056768K)], 0.0191522 secs] [Times: user=0.14 sys=0.01, real=0.02 secs]
+```
+
+​	日志解析如下表所示。
+
+<div style="text-align:center;font-weight:bold;">Parallel垃圾收集器FULL GC日志解析</div>
+
+<img src="images/image-20241215134443558.png" alt="image-20241215134443558" style="zoom:50%;" />
+
+​		通过日志分析可以总结出Parallel垃圾收集器输出日志的规律，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">日志规律</div>
+
+![image-20241215135522513](images/image-20241215135522513.png)
+
+## 24.4 G1垃圾收集器日志解析
+
+​	G1垃圾收集器的垃圾收集过程在前面的章节已经讲过了，它是区域化分代式垃圾收集器。G1垃圾收集器的垃圾收集包含四个环节，分别是Minor GC、并发收集、混合收集(Mixed GC)和Full GC，下面针对每个环节的GC日志进行解析。
+
+### 24.4.1 
+
+​	下面解析G1垃圾收集器产生的Minor GC日志。
+
+
+
+
+
+
+
+
+
+
+
+# 第25章 OOM分类及解决方案
+
+# 第26章 性能优化案例
+
+# 分割线========================
+
+![image-20230416121332413](images/image-20230416121332413.png)
+
+
+
+
+
+
+
+
+
+![image-20240725124156003](images/image-20240725124156003.png)
+
+### 堆（Heap）
+
+#### 栈上分配、TLAB、PLAB
+
+![img](images/345fb491ba0a490ebd96d65c20d3a59e.png)
+
+
+
+# 二、垃圾回收算法与垃圾回收器（<span style="color:red;font-weight:bold;">上篇</span>）
+
+## 
+
+![image-20240824164900828](images/image-20240824164900828.png)
+
+### 6.4、常用的显示GC日志的参数
+
+通过阅读GC日志，我们可以了解Java虚拟机内存分配与回收策略。
+
+内存分配与垃圾回收的参数列表：
+
+<span style="color:blue;font-weight:bold;">-XX:+PrintGC</span>
+
+输出GC日志。类似： -verbose:gc
+
+<span style="color:blue;font-weight:bold;">-XX:+PrintGCDetails</span>
+
+输出GC的详细日志
+
+<span style="color:blue;font-weight:bold;">-XX:+PrintGCTimeStamps</span>
+
+输出GC的时间戳（以基准时间的形式）
+
+<span style="color:blue;font-weight:bold;">-XX:+PrintGCDateStamps</span>
+
+输出GC的时间戳（以日期的形式，如2013-05-04T21:55:59.235+0800）
+
+<span style="color:blue;font-weight:bold;">-XX:+PrintHeapAtGC</span>
+
+在进行GC的前后打印出堆的信息
+
+<span style="color:blue;font-weight:bold;">-Xloggc:../logs/gc.log</span>
+
+日志文件的输出路径
+
+![image-20240914123906092](images/image-20240914123906092.png)
+
+
+
+![image-20240914123922369](images/image-20240914123922369.png)
+
+
+
+![image-20240914123939708](images/image-20240914123939708.png)
+
+
+
+![image-20240914125730379](images/image-20240914125730379.png)
+
+
+
+![image-20240914125811912](images/image-20240914125811912.png)
+
+
+
+![image-20240914130024251](images/image-20240914130024251.png)
+
+
+
+![image-20240914130216234](images/image-20240914130216234.png)
+
+
+
+![image-20240914130228189](images/image-20240914130228189.png)
+
+# 五、性能监控（命令行、可视化工具）（<span style="color:red;font-weight:bold;">下篇</span>）
 
 ## 5、分析GC日志
-
-### 5.1、GC日志参数
-
-- <span style="color:blue;font-weight:bold;">-verbose:gc</span> ： 输出gc日志信息，默认输出到标准输出。<span style="color:orange;font-weight:bold;">可独立使用</span>
-- <span style="color:blue;font-weight:bold;">-XX:+PrintGC</span> 等同于 -verbose:gc ；表示打开简化的GC日志。<span style="color:orange;font-weight:bold;">可独立使用</span>
-- <span style="color:blue;font-weight:bold;">-XX:+PrintGCDetails</span> ： 在发生垃圾回收时打印内存回收详细的日志，并在进程退出时输出当前内存各个区域分配情况。<span style="color:orange;font-weight:bold;">可独立使用</span>
-- <span style="color:blue;font-weight:bold;">-XX:+PrintGCTimeStamps</span> ： 输出GC发生时的时间戳。<span style="color:orange;font-weight:bold;">需要配合-XX:+PrintGCDetails使用</span>
-- <span style="color:blue;font-weight:bold;">-XX:+PrintGCDateStamps</span> ： 输出GC发生时的时间戳（以日期的形式，如2013-05-04T21:53:59.234+0800）。<span style="color:orange;font-weight:bold;">需要配合-XX:+PrintGCDetails使用</span>
-- <span style="color:blue;font-weight:bold;">-XX:+PrintHeapAtGC</span> ： 每一次GC前和GC后，都打印堆信息。<span style="color:orange;font-weight:bold;">**可独立使用**</span>
-- <span style="color:blue;font-weight:bold;">-Xloggc:<file></span> ： 把GC日志写入到一个文件中去，而不是打印到标准输出中。<span style="color:orange;font-weight:bold;">需要配合-XX:+PrintGCDetails使用</span>
 
 ### 5.2、GC日志格式
 
