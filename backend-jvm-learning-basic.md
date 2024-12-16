@@ -15985,286 +15985,213 @@ public class GCLogTest {
 
 ​	通过代码<span style="color:blue;font-weight:bold;">案例1：GC日志演示</span>生成日志文件，为了增大效果，我们将其中的循环做如下修改。
 
+```java
+    public static void main(String[] args) {
+        ArrayList<byte[]> list = new ArrayList<>();
+
+        for (int i = 0; i < 10000; i++) {
+            byte[] arr = new byte[1024 * 100]; // 100KB
+            list.add(arr);
+        }
+    }
+```
+
+​	JVM参数配置如下，其中log表示在工作目录下的log文件夹，所以首先需要创建log目录，之后执行代码即可生成日志文件gc.log。
+
+```bash
+-Xms600m -Xmx600m -XX:SurvivorRatio=8 -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -XX:+PrintGCDateStamps -Xloggc:/Users/wenqiu/Misc/gc.log
+```
+
+​	内存的分析报告如下图所示，其中新生代内存大小为180M，最多使用了179.89M。老年代内存大小为400M，最多使用了399.97M。
+
+<div style="text-align:center;font-weight:bold;">GCeasy堆内存分析</div>
+
+![image-20241215212316933](images/image-20241215212316933.png)
+
+​	吞吐量和停顿时间分析结果如下图所示，其中吞吐量为15.663%，平均停顿时间为7.78ms，最长停顿时间为20.0ms。
+
+<div style="text-align:center;font-weight:bold;">吞吐量和停顿时间报告</div>
+
+![image-20241215212841911](images/image-20241215212841911.png)
+
+垃圾收集报告如下图所示，可以看到GC的次数、收集的内存空间、总时间、平均时间、最短时间和最长时间等相关信息。
+
+<div style="text-align:center;font-weight:bold;">GC报告
+</div>
+
+![image-20241215213333319](images/image-20241215213333319.png)
+
+### 24.6.2 GCViewer
+
+​	上面介绍了一款在线的GC日志分析器，下面介绍一款离线版的GCViewer。GCViewer是一个免费的、开源的分析小工具，用于可视化查看由SUN/Oracle、IBM、HP和BEA虚拟机产生的垃圾收集器的日志。
+
+​	GCViewer用于可视化JVM参数-verbose:gc和.NET生成的数据-Xloggc:<file>。它还计算与垃圾收集相关的性能指标，比如吞吐量、累积的暂停、最长的暂停等。当通过更改世代大小或设置初始堆大小来调整特定应用程序的垃圾收集时，此功能非常有用。
+
+**1 下载GCViewer工具**
+
+​	网址：https://github.com/chewiebug/GCViewer
+
+​	下载完成之后执行mvn clean install -Dmaven.test.skip=true命令进行编译，编译完成后在target目录下会看到jar包，打开即可。也可以直接下载运行版本。
+
+**2 运行**
+
+​	通过java命令即可运行该工具，命令如下。
+
+```bash
+% java -jar ~/Misc/gcviewer-1.36.jar 
+```
+
+​	打开界面如下图所示。
+
+<div style="text-align:center;font-weight:bold;">GCViewer打开界面</div>
+
+<img src="images/image-20241215221036688.png" alt="image-20241215221036688" style="zoom:50%;" />
+
+​	打开之后，选择“File”→“Open File”选项，选择GC日志，可以看到下图所示页面，图标是可以放大缩小的，主要内容就是图中标记的部分，里面的内容跟上面的GCeasy比较类似。
+
+<div style="text-align:center;font-weight:bold;">GCViewer报告图表</div>
+
+<img src="images/image-20241215221718855.png" alt="image-20241215221718855" style="zoom:50%;" />
+
+​	Chart图标中各个颜色代表的含义如下图所示。
+
+<div style="text-align:center;font-weight:bold;">GC日志报告图标颜色含义</div>
+
+<img src="images/image-20241215222737122.png" alt="image-20241215222737122" style="zoom:67%;" />
+
+​	Full GC Lines表示Full GC。
+
+​	Inc GC Lines表示增量GC。
+
+​	GC Times Line表示垃圾收集时间。
+
+​	GC Times Rectangles表示垃圾收集器时间区域。
+
+​	Total Heap表示总堆大小。
+
+​	Tenured Generation表示老年代。
+
+​	日志分析报告如下图所示，可以得知其中经过Full GC之后最大堆内存大小为1615.8M，吞吐量是84.29%。
+
+​	内存报告如图24-10所示，可以得知老年代分配内存400M，新生代分配内存180M等信息。
+
+<div style="text-align:center;font-weight:bold;">GC日志报告汇总</div>
+
+<img src="images/image-20241215223724910.png" alt="image-20241215223724910" style="zoom:50%;" />
+
+​	停顿时间相关的报告如下图所示，可以得知总的停顿报告和Full GC相关的报告以及GC的停顿报告。停顿总时间为0.08s，停顿次数为9次，Full GC的停顿时间为0.04s，次数为7次。
+
+<div style="text-align:center;font-weight:bold;">GC停顿时间</div>
+
+<img src="images/image-20241215224207604.png" alt="image-20241215224207604" style="zoom:50%;" />
+
+### 24.6.3 其他工具
+
+​	GChisto也是一款专业分析垃圾收集器日志的工具，可以通过垃圾收集器日志来分析Minor GC、Full GC的次数、频率、持续时间等。最后通过列表、报表、图表等不同形式来反映垃圾收集器的情况。
+
+​	另外还有HPjmeter，该工具很强大，但只能打开由-verbose:gc和-Xloggc:gc.log参数生成的GC日志。添加其他参数生成的gc.log无法打开。
+
+## 24.7 根据日志信息解析堆空间数据分配
+
+​	各位读者请看如下代码，运行代码的时候加入以下JVM参数配置，该参数可以使得老年代和新生代的内存分别是10M，垃圾收集器使用Serial GC。首先在JDK7中测试。
+
+```bash
+-verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails￼-XX:SurvivorRatio=8 -XX:+UseSerialGC
+```
+
+​	如下代码的意思很简单，分别申请四个数组，前面三个数组的大小分别是2M，最后一个数组大小是5M。
+
+<span style="color:#40E0D0;">案例1：堆内存分配</span>
+
+- 代码
+
+```java
+package com.coding.jvm06.collector;
+
+/**
+ * 在JDK7 和 JDK8中分别执行
+ * -verbose:gc -Xms20M -Xmx20M -Xmn10M -XX:+PrintGCDetails -XX:SurvivorRatio=8 -XX:+UseSerialGC -Xloggc:./logs/gc.log
+ */
+public class GCLogTest2 {
+
+    private static final int _1MB = 1024 * 1024;
+
+    public static void testAllocation() {
+        byte[] allocation1, allocation2, allocation3, allocation4;
+        allocation1 = new byte[2 * _1MB];
+        allocation2 = new byte[2 * _1MB];
+        allocation3 = new byte[2 * _1MB];
+        allocation4 = new byte[5 * _1MB];
+    }
+
+    public static void main(String[] args) {
+        testAllocation();
+    }
+}
+
+```
+
+​	当堆内存中存储allocation4对象时发现Eden区中的内存不足，S0区和S1区的空间也不足以存下新对象，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">堆空间存放第四个对象之前</div>
+
+![image-20241215225550234](images/image-20241215225550234.png)
+
+​	这时进行GC把Eden区中的数据转移到老年代，再把新对象的数据存放到Eden区，结果如图24-13所示。Eden区放入对象allocation4，老年代放入另外三个数组对象，内存大小总和为6M，占比60%。
+
+​	其日志输出结果如下图所示。可以看到Eden区占比为65%，老年代占比为60%，正好对应了前面的说法。
+
+<div style="text-align:center;font-weight:bold;">堆空间存放第四个对象之后</div>
+
+![image-20241215225813186](images/image-20241215225813186.png)
+
+<div style="text-align:center;font-weight:bold;">JDK 7堆内存的分布情况</div>
+
+<img src="images/image-20241215225918077.png" alt="image-20241215225918077" style="zoom:50%;" />
+
+​	需要注意的是在JDK 1.8中，可能出现两种结果，一种是老年代占比为60%，和JDK 1.7中内存分配是一样的，还有一种情况是老年代占比为40%，这是由于JDK 1.8小版本号的不同导致的，这里的40%指的是allocation1和allocation2的内存之和，allocation3并没有转移到老年代，这只是小版本号之间的差异，读者只要能够根据GC日志分析清楚哪些对象在哪个区域即可。
+
+​	如果使用的是ParallelGC，也可能出现直接把allocation4放入老年代的情况，占比为50%，其日志输出结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JDK 8堆内存的分布情况</div>
+
+<img src="images/image-20241215230054796.png" alt="image-20241215230054796" style="zoom:50%;" />
+
+
+
 # 第25章 OOM分类及解决方案
+
+​	在工作中会经常遇到内存溢出(Out Of Memory,OOM)异常的情况，每当遇到OOM，总是让人头疼不已，不知如何下手解决。本章汇总了OOM产生的不同场景，从案例出发，模拟产生不同类型的OOM，针对不同类型的OOM给出相应的解决方案。
+
+## 25.1 概述
+
+​	当JVM没有足够的内存来为对象分配空间，并且垃圾回收器也已经没有空间可回收时，就会抛出OOM异常。OOM可以分为四类，分别是堆内存溢出、元空间溢出、GC overhead limit exceeded和线程溢出。
+
+## 25.2 OOM案例1：堆内存溢出
+
+​	堆内存溢出报错信息如下。
+
+```java
+java.lang.OutOfMemoryError:Java heap space
+```
+
+​	模拟线上环境产生OOM，如下代码所示。
+
+<span style="color:#40E0D0;">案例1：模拟线上环境产生OOM</span>
+
+
 
 # 第26章 性能优化案例
 
 # 分割线========================
 
-![image-20230416121332413](images/image-20230416121332413.png)
 
-
-
-
-
-
-
-
-
-![image-20240725124156003](images/image-20240725124156003.png)
 
 ### 堆（Heap）
 
 #### 栈上分配、TLAB、PLAB
 
 ![img](images/345fb491ba0a490ebd96d65c20d3a59e.png)
-
-
-
-# 二、垃圾回收算法与垃圾回收器（<span style="color:red;font-weight:bold;">上篇</span>）
-
-## 
-
-![image-20240824164900828](images/image-20240824164900828.png)
-
-### 6.4、常用的显示GC日志的参数
-
-通过阅读GC日志，我们可以了解Java虚拟机内存分配与回收策略。
-
-内存分配与垃圾回收的参数列表：
-
-<span style="color:blue;font-weight:bold;">-XX:+PrintGC</span>
-
-输出GC日志。类似： -verbose:gc
-
-<span style="color:blue;font-weight:bold;">-XX:+PrintGCDetails</span>
-
-输出GC的详细日志
-
-<span style="color:blue;font-weight:bold;">-XX:+PrintGCTimeStamps</span>
-
-输出GC的时间戳（以基准时间的形式）
-
-<span style="color:blue;font-weight:bold;">-XX:+PrintGCDateStamps</span>
-
-输出GC的时间戳（以日期的形式，如2013-05-04T21:55:59.235+0800）
-
-<span style="color:blue;font-weight:bold;">-XX:+PrintHeapAtGC</span>
-
-在进行GC的前后打印出堆的信息
-
-<span style="color:blue;font-weight:bold;">-Xloggc:../logs/gc.log</span>
-
-日志文件的输出路径
-
-![image-20240914123906092](images/image-20240914123906092.png)
-
-
-
-![image-20240914123922369](images/image-20240914123922369.png)
-
-
-
-![image-20240914123939708](images/image-20240914123939708.png)
-
-
-
-![image-20240914125730379](images/image-20240914125730379.png)
-
-
-
-![image-20240914125811912](images/image-20240914125811912.png)
-
-
-
-![image-20240914130024251](images/image-20240914130024251.png)
-
-
-
-![image-20240914130216234](images/image-20240914130216234.png)
-
-
-
-![image-20240914130228189](images/image-20240914130228189.png)
-
-# 五、性能监控（命令行、可视化工具）（<span style="color:red;font-weight:bold;">下篇</span>）
-
-## 5、分析GC日志
-
-### 5.2、GC日志格式
-
-#### 5.2.1、复习：GC分类
-
-针对HotSpot VM的实现，它里面的GC按照回收区域又分为两大种类型：一种是部分收集（Partial GC），一种是整堆收集（Full GC）
-
-- 部分收集：不是完整收集整个Java堆的垃圾收集。其中又分为：
-  - 新生代收集（Minor GC/Young GC）：只是新生代（Eden\S0,S1）的垃圾收集。
-  - 老年代收集（Major GC/Old GC）：只是老年代的垃圾收集。
-    - 目前，只有CMS GC会有单独收集老年代的行为。
-    - <span style="color:red;font-weight:bold;">注意，很多时候Major GC会和Full GC混淆使用，需要具体分辨是老年代回收还是整堆回收。</span>
-  - 混合收集（Mixed GC）：收集整个新生代以及部分老年代的垃圾收集。
-    - 目前，只有G1 GC会有这种行为
-- 整堆收集（Full GC）：收集整个Java堆和方法区的垃圾收集。
-
-#### 5.2.2、哪些情况会触发Full GC？
-
-- 老年代空间不足
-- 方法区空间不足
-- 显示调用System.gc()
-- Minor GC进入老年代的数据大小，大于老年代的可用内存。
-- 大对象直接进入老年代，而老年代的可用空间不足。
-
-#### 5.2.3、GC日志分类
-
-##### MinorGC
-
-MinorGC（或young GC或YGC）日志：
-
-```tex
-[GC (Allocation Failure) [PSYoungGen: 16284K->2024K(18432K)] 16284K->14298K(59392K), 0.0086148 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
-```
-
-![image-20241026173002022](images/image-20241026173002022.png)
-
-![image-20241026173046580](images/image-20241026173046580.png)
-
-##### Full GC
-
-```tex
-[Full GC (Ergonomics) [PSYoungGen: 2020K->0K(18432K)] [ParOldGen: 28540K->30390K(40960K)] 30560K->30390K(59392K), [Metaspace: 3766K->3766K(1056768K)], 0.0131854 secs] [Times: user=0.02 sys=0.00, real=0.01 secs] 
-```
-
-![image-20241026173220599](images/image-20241026173220599.png)
-
-![image-20241026185950614](images/image-20241026185950614.png)
-
-#### 5.2.4、GC日志结构剖析
-
-##### 垃圾收集器
-
-- 使用Serial收集器在新生代的名字是Default New Generation，因此显示的是`[DefNew`；老年代名字`Tenured`。
-- 使用ParNew收集器在新生代的名字会变成`[ParNew`，意思是 Parallel New Generation
-- 若老年代使用CMS，则新生代会触发ParNew，此时老年代回收日志名字`CMS-initial-mark`
-- 使用Parallel Scavenge收集器在新生代的名字是`[PSYoungGen`，这里的JDK1.7使用的就是PSYoungGen
-- 使用Parallel Old Generation收集器在老年代的名字是`[ParOldGen`
-- 使用G1收集器的话，会显示为`garbage-first heap`
-
-Allocation Failure：表明本次引起GC的原因是因为在<span style="color:blue;font-weight:bold;">年轻代中没有足够的空间能够存储新的数据了</span>。
-
-##### GC前后情况
-
-通过图示，我们可以发现GC日志格式的规律一般都是：GC前内存占用->GC后内存占用（该区域内存总大小）。
-
-**[PSYoungGen: 16284K->2024K(18432K)] 16284K->14298K(59392K)**
-
-中括号内：GC回收前年轻代堆大小，回收后大小，（年轻代堆总大小）
-
-中括号外：GC回收前年轻代和老年代大小，回收后大小，（年轻代和老年代总大小）
-
-##### GC时间
-
-GC日志中有三个时间：user，sys和real
-
-- user - 进程执行用户态代码（核心之外）所使用的时间。<span style="color:red;font-weight:bold;">这是执行此进程所使用的实际CPU时间，</span>其他进程和此进程阻塞的时间并不包括在内。在垃圾收集的情况下，表示GC线程执行所使用的CPU总时间。
-- sys - 进程在内核态消耗的CPU时间，即<span style="color:red;font-weight:bold;">在内核执行系统调用或等待系统事件所使用的CPU时间</span>
-- real - 程序从开始到结束所用的时钟时间。这个时间包括其他进程使用的的时间片和进程阻塞的时间（比如等待I/O完成）。对于并行gc，这个数字应该接近（用户时间+系统时间）除以垃圾收集器使用的线程数。
-
-​	由于多核的原因，一般的GC事件中，real time是小于sys + user time的，因为一般是多个线程并发的区做GC，所以real time是要小于sys+user time的。如果real > sys+user的话，则你的应用可能存在下列问题：IO负载非常重或者是CPU不够用。
-
-#### 5.2.5、Minor GC日志解析
-
-> -XX:+PrintGCDetails 联合 -XX:+PrintGCTimeStamps
->
-> 4.231: [GC (Allocation Failure) [PSYoungGen: 16284K->2020K(18432K)] 16284K->14230K(59392K), 0.0063460 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
->
-> -XX:+PrintGCDetails 联合 -XX:+PrintGCDateStamps
->
-> 2024-10-26T11:01:10.796+0800: [GC (Allocation Failure) [PSYoungGen: 16284K->2036K(18432K)] 16284K->14206K(59392K), 0.0089108 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
-
-- 4.231
-  - 针对-XX:+PrintGCTimeStamps参数下的日志打印时间  gc发生时，Java虚拟机启动以来经过的秒数
-
-- 2024-10-26T11:01:10.796+0800
-  - 针对-XX:+PrintGCDateStamps参数下的日志打印时间 日期格式
-- [GC (Allocation Failure) 
-  - 发生了一次垃圾回收，这是一次Minor GC。它不区分新生代 GC 还是老年代 GC，括号里的内容是gc发生的原因，这里的Allocation Failure的原因是新生代中没有足够区域能够存放需要分配的数据而失败。
-
-- [PSYoungGen: 16284K->2036K(18432K)] 
-  - PSYoungGen：表示GC发生的区域，区域名称与使用的GC收集器是密切相关的
-    - Serial收集器：Default New Generation 显示 <span style="color:blue;font-weight:bold;">DefNew</span>
-    - ParNew收集器：<span style="color:blue;font-weight:bold;">ParNew</span>
-    - Parallel Scavenge收集器：<span style="color:blue;font-weight:bold;">PSYoungGen</span>
-    - 老年代和新生代同理，也是和收集器名称相关
-  - 16284K->2036K(18432K)
-    - GC前该内存区域已使用容量 -> GC后该区域容量（该区域总容量）
-    - 如果是新生代，总容量则会显示整个新生代内存的9/10，即eden+from/to区容量
-    - 如果是老年代，总容量则是全部内存大小，无变化。
-- 16284K->14230K(59392K)
-  - 在显示完区域容量GC的情况之后，会接着显示整个堆内存区域的GC情况：GC前对内存已使用容量->GC后堆内存容量（堆内存总容量）
-  - 堆内存总容量 = 9/10新生代 + 老年代 < 初始化的内存大小
-- , 0.0063460 secs]
-  - 整个GC所花费的时间，单位是秒
--  [Times: user=0.00 sys=0.00, real=0.01 secs] 
-  - user ： 指的是CPU工作在用户态所花费的时间
-  - sys ： 指的是CPU工作在内核态所花费的时间
-  - real ： 指的是在此次GC事件中所花费的总时间
-
-
-
-#### 5.2.6、Full GC日志解析
-
-> -XX:+PrintGCDetails 联合 -XX:+PrintGCTimeStamps
->
-> 9.325: [Full GC (Ergonomics) [PSYoungGen: 2000K->0K(18432K)] [ParOldGen: 28620K->30399K(40960K)] 30620K->30399K(59392K), [Metaspace: 3766K->3766K(1056768K)], 0.0136097 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
->
-> -XX:+PrintGCDetails 联合 -XX:+PrintGCDateStamps
->
-> 2024-10-26T11:01:15.959+0800: [Full GC (Ergonomics) [PSYoungGen: 2028K->0K(18432K)] [ParOldGen: 28672K->30399K(40960K)] 30700K->30399K(59392K), [Metaspace: 3767K->3767K(1056768K)], 0.0136801 secs] [Times: user=0.00 sys=0.00, real=0.01 secs] 
-
-- 9.325
-  - gc发生时，Java虚拟机启动以来经过的秒数
-- 2024-10-26T11:01:15.959+0800
-  - 日志打印时间 日期格式
-- [Full GC (Ergonomics) 
-  - 发生了一次垃圾回收，这是一次Full GC。它不区分新生代GC还是老年代GC
-  - 括号里的内容是发生gc的原因，这里的 Ergonomics 的原因是JVM自适应调整导致的GC
-    - Ergonomics ： 自适应调整导致GC
-    - Metadata GC Threshold ： Metaspace区不够用了
-    - System ： System.gc()方法调用导致的GC
--  [PSYoungGen: 2028K->0K(18432K)]
-  - PSYoungGen ： 表示GC发生的区域，区域名称与使用的GC收集器是密切相关的
-    - Serial收集器：Default New Generation 显示 <span style="color:blue;font-weight:bold;">DefNew</span>
-    - ParNew收集器：<span style="color:blue;font-weight:bold;">ParNew</span>
-    - Parallel Scavenge收集器：<span style="color:blue;font-weight:bold;">PSYoungGen</span>
-    - 老年代和新生代同理，也是和收集器名称相关
-  - 2028K->0K(18432K)
-    - GC前该内存区域已使用容量 -> GC后该区域容量（该区域总容量）
-    - 如果是新生代，总容量则会显示整个新生代内存的9/10，即eden+from/to区容量
-    - 如果是老年代，总容量则是全部内存大小，无变化。
-- [ParOldGen: 28672K->30399K(40960K)] 
-  - 老年代区域没有发生GC
-- 30700K->30399K(59392K),
-  - 在现实完区域容量GC的情况之后，会接着显示整个堆内存区域的GC情况：GC前堆内存已使用容量->GC堆内存容量（堆内存总容量），堆内存总容量=9/10新生代+老年代<初始化的内存大小。
--  [Metaspace: 3767K->3767K(1056768K)], 
-  - metaspace GC回收0K空间
-- 0.0136801 secs]
-  - 整个GC所花费的时间，单位是秒
-- [Times: user=0.00 sys=0.00, real=0.01 secs] 
-  - user ： 指的是CPU工作在用户态所花费的时间
-  - sys ： 指的是CPU工作在内核态所花费的时间
-  - real ： 指的是在此次GC事件中所花费的总时间
-
-### 5.3、GC日志分析工具
-
-​	GC日志可视化分析工具GCeasy和GCviewer等。通过GC日志可视化分析工具，我们可以很方便的看到JVM各个分代的内存使用情况、垃圾回收次数、垃圾回收的原因、垃圾回收占用的时间、吞吐量等，这些指标在我们进行JVM调优的时候是很有用的。
-
-​	如果想把GC日志存到文件的话，是下面这个参数：
-
-​	-Xloggc:/path/to/gc.log
-
-​	然后就可以用一些工具去分析这些GC日志。
-
-#### 5.3.1、GCeasy【推荐】
-
-GCeasy——一款超好用的在线分析GC日志的网站。
-
-官网地址：https://gceasy.io/，GCeasy是一款在线的GC日志分析器，可以通过GC日志分析进行内存泄漏检测、GC暂停原因分析、JVM配置建议优化等功能，而且是可以免费使用的（有一些服务是收费的）。
-
-#### 5.3.2、GCViewer
-
-GCViewer是一个免费的、开源的分析小工具，用于可视化查看由SUN/Oracle，IBM，HP和BEA Java虚拟机产生的垃圾收集器的日志。
-
-GCViewer用于可视化Java VM选项-verbose:gc和.NET生成的数据-Xloggc:<file>。它还计算与垃圾回收相关的性能指标（吞吐量、累计的暂停、最长的暂停等）。当通过更改世代大小或设置初始堆大小来调整特定应用程序的垃圾回收时，此功能非常有用。
 
 # 六、性能调优（<span style="color:red;font-weight:bold;">下篇</span>）
 
