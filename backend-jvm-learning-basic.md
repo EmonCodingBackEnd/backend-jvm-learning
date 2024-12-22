@@ -16179,9 +16179,1320 @@ java.lang.OutOfMemoryError:Java heap space
 
 <span style="color:#40E0D0;">案例1：模拟线上环境产生OOM</span>
 
+- 代码
 
+```bash
+package com.coding.jvm06.gc;
+
+import java.util.ArrayList;
+
+/**
+ * -Xms200M
+ * -Xmx200M
+ * -XX:MetaspaceSize=64M
+ * -XX:+PrintGCDetails
+ * -XX:+PrintGCDateStamps
+ * -Xloggc:/Users/wenqiu/Misc/gc-oom.log
+ * -XX:+HeapDumpOnOutOfMemoryError
+ * -XX:HeapDumpPath=/Users/wenqiu/Misc/heapdump.hprof
+ */
+public class HeapOOM {
+    byte[] buffer = new byte[1 * 1024 * 1024]; // 1MB
+
+    public static void main(String[] args) {
+        ArrayList<HeapOOM> list = new ArrayList<HeapOOM>();
+
+        int count = 0;
+        try {
+            while (true) {
+                list.add(new HeapOOM());
+                count++;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            System.out.println("count = " + count);
+        }
+    }
+}
+
+```
+
+​	JVM参赛配置如下：
+
+```bash
+-Xms200M
+-Xmx200M
+-XX:MetaspaceSize=64M
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/gc-oom.log
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/Users/wenqiu/Misc/heapdump.hprof
+```
+
+​	运行结果如下所示。
+
+![image-20241216125110463](images/image-20241216125110463.png)
+
+​	运行程序得到heapdump.hprof文件，在设置的heap目录下，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">heapdump.hprof</div>
+
+![image-20241216125306359](images/image-20241216125306359.png)
+
+​	由于我们当前设置的内存比较小，所以该文件比较小，但是正常在线上环境，该文件是比较大的，通常以G为单位。
+
+​	下面使用工具分析堆内存文件heapdump.hprof，通过Java VisualVM工具查看哪个类的实例占用内存最多，这样就可以初步定位到问题所在。如下图所示，可以看到在堆内存中存在大量的byte[]对象，占用了99.8%内存，进一步查看得知是HeapOOM实例，基本上就可以定位问题所在了。当然这里的代码比较简单，在工作中，定位问题的思路基本一致。
+
+<div style="text-align:center;font-weight:bold;">Java VisualVM打开heapdump.hprof</div>
+
+![image-20241216135432190](images/image-20241216135432190.png)
+
+![image-20241216135613473](images/image-20241216135613473.png)
+
+​	内存溢出的原因有很多，比如代码中存在大对象分配，导致没有足够的内存空间存放该对象；再比如应用存在内存泄漏，导致在多次垃圾收集之后，依然无法找到一块足够大的内存容纳当前对象。
+
+​	对于堆溢出的解决方法，这里提供如下思路。
+
+​	(1)检查是否存在大对象的分配，最有可能的是大数组分配。
+
+​	(2)通过jmap命令，把堆内存dump下来，使用内存分析工具分析导出的堆内存文件，检查是否存在内存泄漏的问题。
+
+​	(3)如果没有找到明显的内存泄漏，考虑加大堆内存。
+
+​	(4)检查是否有大量的自定义的Finalizable对象，也有可能是框架内部提供的，考虑其存在的必要性。
+
+## 25.3 OOM案例2：元空间溢出
+
+​	方法区与堆一样，是各个线程共享的内存区域，它用于存储已被JVM加载的类信息、常量、静态变量、即时编译器编译后的代码等数据。JDK 8后，元空间替换了永久代来作为方法区的实现，元空间使用的是本地内存。
+
+​	Java虚拟机规范对方法区的限制非常宽松，除了和堆一样不需要连续的内存和可以选择固定大小或者可扩展外，还可以选择不实现垃圾收集。垃圾收集行为在这个区域是比较少出现的，其内存回收目标主要是针对常量池的回收和对类型的卸载。当元空间无法满足内存分配需求时，将抛出OOM异常。元空间溢出报错信息如下。
+
+```bash
+java.lang.OutOfMemoryError:Metaspace
+```
+
+​	元空间溢出可能有如下几种原因。
+
+​	(1)运行期间生成了大量的代理类，导致元空间被占满，无法卸载。
+
+​	(2)应用长时间运行，没有重启。
+
+​	(3)元空间内存设置过小。
+
+​	该类型内存溢出解决方法有如下几种。
+
+​	(1)检查是否永久代空间或者元空间设置得过小。
+
+​	(2)检查代码中是否存在大量的反射操作。
+
+​	(3)dump之后通过mat检查是否存在大量由于反射生成的代理类。
+
+​	如下代码所示，代码含义是使用动态代理产生类使得元空间溢出。
+
+<span style="color:#40E0D0;">案例1：元空间溢出</span>
+
+- 代码
+
+```bash
+package com.coding.jvm07.gui;
+
+import org.springframework.cglib.proxy.Enhancer;
+import org.springframework.cglib.proxy.MethodInterceptor;
+
+import java.lang.management.ClassLoadingMXBean;
+import java.lang.management.ManagementFactory;
+
+/**
+ * -Xms60M
+ * -Xmx60M
+ * -Xss512K
+ * -XX:SurvivorRatio=8
+ * -XX:MetaspaceSize=60M
+ * -XX:MaxMetaspaceSize=60M
+ * -XX:+PrintGCDetails
+ * -XX:+PrintGCDateStamps
+ * -Xloggc:/Users/wenqiu/Misc/metaspace-oom.log
+ * -XX:+HeapDumpOnOutOfMemoryError
+ * -XX:HeapDumpPath=/Users/wenqiu/Misc/metaspacedump.hprof
+ * -XX:+TraceClassLoading
+ * -XX:+TraceClassUnloading
+ */
+public class MetaspaceOOM {
+
+    public static void main(String[] args) {
+        ClassLoadingMXBean classLoadingMXBean = ManagementFactory.getClassLoadingMXBean();
+        while (true) {
+            Enhancer enhancer = new Enhancer();
+            enhancer.setSuperclass(People.class);
+            enhancer.setUseCache(false);
+            enhancer.setCallback((MethodInterceptor) (o, method, objects, methodProxy) -> {
+                System.out.println("我是加强类哦，输出print之前的加强方法");
+                return methodProxy.invokeSuper(o, objects);
+            });
+            People people = (People) enhancer.create();
+            people.print();
+            System.out.println(people.getClass());
+            System.out.println("totalClass:" + classLoadingMXBean.getTotalLoadedClassCount());
+            System.out.println("activeClass:" + classLoadingMXBean.getLoadedClassCount());
+            System.out.println("unloadedClass:" + classLoadingMXBean.getUnloadedClassCount());
+        }
+
+    }
+}
+
+class People {
+    public void print() {
+        System.out.println("我是 print 本人");
+    }
+}
+
+```
+
+​	JVM参数配置如下。
+
+```bash
+-Xms60M
+-Xmx60M
+-Xss512K
+-XX:SurvivorRatio=8
+-XX:MetaspaceSize=60M
+-XX:MaxMetaspaceSize=60M
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/metaspace-oom.log
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/Users/wenqiu/Misc/metaspacedump.hprof
+-XX:+TraceClassLoading
+-XX:+TraceClassUnloading
+```
+
+​	运行结果如下所示。
+
+![image-20241216170001987](images/image-20241216170001987.png)
+
+​	查看监控，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">Java VisualVM打开metaspacedump.hprof</div>
+
+![image-20241216170618802](images/image-20241216170618802.png)
+
+​	从上图中可以看到元空间几乎已经被全部占用。查看GC状态，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">查看GC状态</div>
+
+![image-20241216172449156](images/image-20241216172449156.png)
+
+​	可以看到，Full GC非常频繁，而且元空间占用了61440KB即60MB空间，几乎把整个元空间占用。所以得出的结论是方法区空间设置过小，或者存在大量由于反射生成的代理类。查看GC日志如下。
+
+```bash
+2024-12-16T17:28:14.446-0800: 1.440: [GC (Allocation Failure) [PSYoungGen: 19744K->256K(20480K)] 43799K->24479K(64512K), 0.0004820 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+2024-12-16T17:28:14.456-0800: 1.450: [GC (Allocation Failure) [PSYoungGen: 19712K->320K(20480K)] 43935K->24719K(64512K), 0.0005688 secs] [Times: user=0.00 sys=0.00, real=0.00 secs] 
+2024-12-16T17:28:14.459-0800: 1.453: [GC (Metadata GC Threshold) [PSYoungGen: 4600K->160K(20480K)] 28999K->24727K(64512K), 0.0003805 secs] [Times: user=0.00 sys=0.01, real=0.00 secs] 
+2024-12-16T17:28:14.459-0800: 1.453: [Full GC (Metadata GC Threshold) [PSYoungGen: 160K->0K(20480K)] [ParOldGen: 24567K->19396K(44032K)] 24727K->19396K(64512K), [Metaspace: 61008K->61008K(110592K)], 0.0417020 secs] [Times: user=0.33 sys=0.02, real=0.05 secs] 
+2024-12-16T17:28:14.501-0800: 1.495: [GC (Last ditch collection) [PSYoungGen: 0K->0K(20480K)] 19396K->19396K(64512K), 0.0012258 secs] [Times: user=0.01 sys=0.00, real=0.00 secs] 
+2024-12-16T17:28:14.502-0800: 1.496: [Full GC (Last ditch collection) [PSYoungGen: 0K->0K(20480K)] [ParOldGen: 19396K->9199K(44032K)] 19396K->9199K(64512K), [Metaspace: 61008K->60915K(110592K)], 0.0230976 secs] [Times: user=0.14 sys=0.01, real=0.02 secs] 
+```
+
+​	可以看到Full GC是由于元空间不足引起的，那么接下来分析到底是什么数据占用了大量的方法区。导出dump文件，使用Java VisualVM分析。
+
+​	首先确定是哪里的代码发生了问题，可以通过线程来确定，因为在实际生产环境中，有时候无法确定是哪块代码引起的OOM，那么就需要先定位问题线程，然后定位代码，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">Java VisualVM打开metaspacedump.hprof</div>
+
+![image-20241216174223173](images/image-20241216174223173.png)
+
+​	定位到问题线程之后，使用MAT工具打开继续分析，如下图所示，先打开线程视图，然后根据线程名称打开对应线程的栈信息，最后找到对应的代码块。
+
+<div style="text-align:center;font-weight:bold;">MAT打开metaspacedump.hprof</div>
+
+![image-20241217083242801](images/image-20241217083242801.png)
+
+​	定位到代码以后，发现有使用到cglib动态代理，那么猜想问题是由于产生了很多代理类。接下来，可以通过包看一下类加载情况。由于代码是代理的People类，所以直接打开该类所在的包，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">打开类所在的包</div>
+
+![image-20241217083707524](images/image-20241217083707524.png)
+
+​	可以看到确实加载了很多的代理类，想一下解决方案，是不是可以只加载一个代理类以及控制循环的次数，当然如果业务上确实需要加载很多类的话，就要考虑增大方法区大小和控制循环的次数，所以这里修改代码如下。
+
+```java
+enhancer.setUseCache(true);
+```
+
+​	修改代码enhancer.setUseCache(false)。当设置为true的话，表示开启cglib静态缓存，这样每次动态代理的结果是生成同一个类。再看程序运行结果如下。
+
+![image-20241217084157906](images/image-20241217084157906.png)
+
+​	可以看到，生成代理类的数量几乎不变，元空间也没有溢出。到此，问题解决。如果需要生成不同的类，调整代码更改循环次数即可。
+
+## 25.4 OOM案例3：GC overhead limit exceeded
+
+​	出现GC overhead limit exceeded这个错误是由于JVM花费太长时间执行GC，且只能回收很少的堆内存。根据Oracle官方文档表述，默认情况下，如果Java进程花费98%以上的时间执行GC，并且每次只有不到2%的堆被恢复，则JVM抛出GC overhead limit exceeded错误。换句话说，这意味着应用程序几乎耗尽了所有可用内存，垃圾收集器花了太长时间试图清理它，并多次失败。这本质是一个预判性的异常，抛出该异常时系统没有真正的内存溢出，GC overhead limit exceeded异常的最终结果是Java heap space。
+
+​	在这种情况下，用户会体验到应用程序响应非常缓慢，通常只需要几毫秒就能完成的某些操作，此时则需要更长的时间来完成，这是因为所有的CPU正在进行垃圾收集，因此无法执行其他任务。使用如下代码演示GC overhead limit exceeded异常。
+
+<span style="color:#40E0D0;">案例1：GC overhead limit exceeded</span>
+
+- 代码
+
+```java
+package com.coding.jvm07.gui;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+public class TestOOM {
+    public static void main(String[] args) {
+        test2();
+    }
+
+    public static void test1() {
+        int i = 0;
+        List<String> list = new ArrayList<>();
+        try {
+            while (true) {
+                list.add(UUID.randomUUID().toString().intern());
+                i++;
+            }
+        } catch (Exception e) {
+            System.out.println("********i:" + i);
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void test2() {
+        Integer i = 0;
+        String str = "";
+        try {
+            while (true) {
+                str += UUID.randomUUID();
+                i++;
+            }
+        } catch (Exception e) {
+            System.out.println("********i:" + i);
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+    }
+}
+
+```
+
+​	JVM配置如下所示。
+
+```bash
+-Xms10M
+-Xmx10M
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/exceeded-oom.log
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/Users/wenqiu/Misc/exceededdump.hprof
+```
+
+​	test1()方法的含义是运行期间将内容放入常量池，运行结果是GC overhead limit exceeded错误。test2()方法的含义是不停地追加字符串str，运行结果是Java heap space错误。读者可能会疑惑，看似test1()方法和test2()方法也没有太大的差别，为什么test2()方法没有报GC overhead limit exceeded呢？以上两个方法的区别在于发生Java heap space的test2()方法每次都能回收大部分的对象（中间产生的UUID），只不过有一个对象是无法回收的，慢慢长大，直到内存溢出。发生GC overhead limit exceeded的test1()方法由于每个字符串都在被list引用，所以无法回收，很快就用完内存，触发不断回收的机制。
+
+​	需要注意的是，有些版本的JDK，有可能不会发生GC overhead limit exceeded，各位读者知道即可。该案例报错信息如下。
+
+![image-20241217090443890](images/image-20241217090443890.png)
+
+​	通过查看GC日志可以发现，系统在频繁地做Full GC，但是却没有回收多少空间，那么引起的原因可能是内存不足，也可能是存在内存泄漏的情况，接下来我们要根据堆内存文件具体分析GC overhead limit exceeded的原因。
+
+**1 定位问题代码块**
+
+​	通过线程分析，可以定位发生OOM的代码块，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">定位发生OOM的代码块</div>
+
+![image-20241217091458429](images/image-20241217091458429.png)
+
+**2 分析堆内存文件**
+
+​	可以看到发生OOM是因为死循环，不停地往ArrayList存放字符串常量，JDK 1.7以后，字符串常量池移到了堆中存储，所以最终导致内存不足发生了OOM。
+
+​	打开“Histogram”选项，如下图所示。可以看到，String类型的字符串占用了大概12M的空间，几乎把堆占满，但是还没有占满，所以这也符合官方对此异常的定义。
+
+<div style="text-align:center;font-weight:bold;">打开“Histogram”选项</div>
+
+![image-20241217095450853](images/image-20241217095450853.png)
+
+​	右击选择“List objects”，列出上图中对象下面的所有引用对象，如下图所示，可以看到所有String对象。
+
+<div style="text-align:center;font-weight:bold;">列出所有引用对象</div>
+
+![image-20241217113107894](images/image-20241217113107894.png)
+
+**3 解决方案**
+
+​	这个是JDK 6新加的错误类型，一般都是堆空间不足导致的。针对该问题的解决方法如下。
+
+​	(1)检查项目中是否有大量的死循环或有使用大内存的代码，优化代码。
+
+​	(2)添加JVM参数-XX:-UseGCOverheadLimit禁用这个检查，其实这个参数解决不了内存问题，只是把错误的信息延后，最终出现java.lang.OutOfMemoryError:Java heap space。
+
+​	(3)导出堆内存文件，如果没有发生内存泄漏，加大内存即可。
+
+## 25.5 OOM案例4：线程溢出
+
+​	线程溢出报错信息如下。
+
+```bash
+java.lang.OutOfMemoryError :unable to create new native Thread
+```
+
+​	线程溢出是因为创建的了大量的线程。出现此种情形之后，可能造成系统崩溃。如下代码模拟了线程溢出。
+
+<div style="text-align:center;font-weight:bold;">线程溢出</div>
+
+<span style="color:#40E0D0;">案例1：线程溢出</span>
+
+- 代码
+
+```java
+package com.coding.jvm07.gui;
+
+import java.util.concurrent.CountDownLatch;
+
+public class TestNativeOutOfMemoryError {
+    public static void main(String[] args) {
+        for (int i = 0; ; i++) {
+            System.out.println("i=" + i);
+            new Thread(new HoldThread()).start();
+        }
+    }
+}
+
+class HoldThread extends Thread {
+    CountDownLatch cd1 = new CountDownLatch(1);
+
+    @Override
+    public void run() {
+        try {
+            cd1.await();
+        } catch (InterruptedException e) {
+        }
+    }
+}
+```
+
+​	结果如下。
+
+![image-20241217125310652](images/image-20241217125310652.png)
+
+​	JDK 5.0以后栈默认为1MB，以前栈默认为256KB。根据应用的线程所需内存大小进行调整，通过参数-Xss设置栈内存。在相同物理内存下，减小这个值能生成更多的线程。但是操作系统对一个进程内的线程数还是有限制的，不能无限生成，经验值是3000～5000。
+
+​	操作系统能创建的线程数的具体计算公式如下。
+
+```bash
+(MaxProcessMemory - JVMMemory - ReservedOsMemory)/(ThreadStackSize) =￼Number of threads
+```
+
+​	其中各项代表含义如下。
+
+​	(1)MaxProcessMemory表示进程可寻址的最大空间。
+
+​	(2)JVMMemory表示JVM内存。
+
+​	(3)ReservedOsMemory表示保留的操作系统内存。	
+
+​	(4)ThreadStackSize表示线程栈的大小。
+
+​	在Java语言里，JVM在创建一个Thread对象的同时创建一个操作系统线程，而这个系统线程的内存用的不是JVMMemory，而是系统中剩下的内存(RemainMemory)，计算公式如下。
+
+```bash
+MaxProcessMemory - JVMMemory – ReservedOsMemory = RemainMemory
+```
+
+​	由公式得出：JVM分配内存越多，那么能创建的线程越少，越容易发生java.lang.OutOfMemoryError:unable to create new native thread。
+
+​	针对该问题的解决方案如下。
+
+​	(1)如果程序中有bug，导致创建大量不需要的线程或者线程没有及时回收，那么必须解决这个bug，修改参数是不能解决问题的。
+
+​	(2)如果程序确实需要大量的线程，现有的设置不能达到要求，那么可以通过修改MaxProcessMemory、JVMMemory和ThreadStackSize三个因素，来增加能创建的线程数。比如使用64位操作系统可以增大MaxProcessMemory、减少JVMMemory的分配或者减小单个线程的栈大小。
+
+​	在实验过程中，64位操作系统下调整Xss的大小并没有对产生线程的总数产生影响，程序执行到极限的时候，操作系统会死机，无法看出效果。
+
+​	在32位Win7操作系统下测试，发现调整Xss的大小会对线程数量有影响，随着Xss值的变大，线程数量越来越少。如下表所示，其中JDK版本是1.8（适配32位操作系统）。
+
+<div style="text-align:center;font-weight:bold;">32位Win7操作系统Xss值对线程数量的影响结果</div>
+
+![image-20241217130618797](images/image-20241217130618797.png)
+
+​	Xss参数的调整对于64位操作系统的实验结果是不明显的，但是对于32位操作系统的实验结果却是非常明显的，为什么会有这样的区别呢？上面讲到过线程数量的计算公式如下所示。
+
+```bash
+(MaxProcessMemory - JVMMemory - ReservedOsMemory)/(ThreadStackSize) =￼Number of threads
+```
+
+​	MaxProcessMemory表示最大寻址空间，在32位系统中，CPU的寻址范围就受到32个二进制位的限制。32位二进制数最大值是11111111 11111111 11111111 11111111,2的32次方=4294967296B = 4194304KB = 4096M =4GB。也就是说32位CPU只能访问4GB的内存。再减去显卡上的显存等内存，可用内存要小于4GB，所以32位操作系统可用线程数量是有限的。
+
+​	64位二进制数的最大值是11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111,2的64次方=17179869184GB，大家可以看看64位操作的寻址空间大小比32位操作系统多了太多，所以这也是我们总是无法测试出很好效果的原因。
+
+​	综上，在生产环境下如果需要更多的线程数量，建议使用64位操作系统，如果必须使用32位操作系统，可以通过调整Xss的大小来控制线程数量。除此之外，线程总数也受到系统空闲内存和操作系统的限制。
 
 # 第26章 性能优化案例
+
+​	前面我们已经学了很多JVM的相关知识，比如运行时数据区的划分、垃圾收集、字节码文件结构和各种性能分析工具。相信大家对JVM也有了比较深入的了解，正所谓实践出真知，学习完理论知识，接下来就要在Java应用中检验JVM知识的使用。本章将从案例出发，从不同的方面优化应用的性能。
+
+## 26.0 安装JMeter
+
+官网：https://jmeter.apache.org/
+
+下载页面：https://jmeter.apache.org/download_jmeter.cgi
+
+老版本下载页面：https://archive.apache.org/dist/jmeter/binaries/
+
+比如，下载：apache-jmeter-5.6.3.zip
+
+然后，解压安装即可！！！解压，即安装！
+
+- 启动
+
+双击：安装目录/bin/jmeter.bat 
+
+- 配置中文
+
+  - 临时
+
+    Options=>Choose Language=>Chinese(Simplified)
+
+  - 永久
+
+  打开安装目录/bin/jmeter.properties，找到`#language=en`，并添加如下内容：
+
+  ```properties
+  #language=en
+  language=zh_CN
+  ```
+
+
+## 26.1 概述
+
+​	JVM性能调优的目标就是减少GC的频率和Full GC的次数，使用较小的内存占用来获得较高的吞吐量或者较低的延迟。程序在运行过程中多多少少会出现一些与JVM相关的问题，比如CPU负载过高、请求延迟过长、tps降低等。更甚至系统会出现内存泄漏、内存溢出等问题进而导致系统崩溃，因此需要对JVM进行调优，使得程序在正常运行的前提下，用户可以获得更好的使用体验。一般来说，针对JVM调优有以下几个比较重要的指标。
+
+​	(1)内存占用：程序正常运行需要的内存大小。
+
+​	(2)延迟：由于垃圾收集而引起的程序停顿时间。
+
+​	(3)吞吐量：用户程序运行时间占用户程序和垃圾收集占用总时间的比值，这里针对的是JVM层面的吞吐量，需要区别于后面讲到的Apache JMeter的吞吐量，JMeter中的吞吐量表示服务器每秒处理的请求数量。
+
+​	当然，调优时所考虑的方向也不同，在调优之前，必须要结合实际场景，有明确的优化目标，找到性能瓶颈，对瓶颈有针对性的优化，最后测试优化后的结果，通过各种监控工具确认调优后的结果是否符合目标。
+
+​	调优监控的依据有哪些？
+
+- 运行日志
+- 异常堆栈
+- GC日志
+- 线程快照
+- 堆转储快照
+
+​	性能优化的步骤？
+
+- 熟悉业务场景
+- 发现问题：性能监控
+  - GC频繁
+  - CPU load过高
+  - OOM
+  - 内存泄露
+  - 死锁
+  - 程序响应时间过长
+- 排查问题：性能分析
+  - 打印GC日志，通过GCViewer或GCeasy来分析日志信息
+  - 灵活运用命令行工具 jstack、jmap、jinfo等
+  - dump出堆文件，使用内存分析工具分析文件
+  - 使用阿里Arthas或jconsole、JVisualVM来实时查看JVM状态
+  - jstack查看堆栈信息
+- 解决问题：性能调优
+  - 适当增加内存，根据业务背景选择垃圾回收器
+  - 优化代码，控制内存使用
+  - 增加机器，分散节点压力
+  - 合理设置线程池线程数量
+  - 使用中间件提高程序效率，比如缓存、消息队列等
+  - 其他......
+
+## 26.2 性能测试工具：Apache JMeter
+
+​	Apache JMeter（简称JMeter）是Apache组织开发的基于Java的压力测试工具，用于对软件做压力测试。它最初用于Web应用测试，后来也扩展到其他测试领域。JMeter可以用于对服务器、网络或对象模拟巨大的负载，来自不同压力类别下测试它们的强度和分析整体性能。本章使用JMeter测试不同的虚拟机配置对性能的影响结果，下面介绍JMeter的基本使用流程。
+
+(1)启动JMeter后一般会默认生成一个测试计划，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JMeter主界面</div>
+
+![image-20241218090148322](images/image-20241218090148322.png)
+
+(2)在测试计划下添加线程组。线程组有以下几种重要的参数。
+
+- 线程数：虚拟用户数，用于并发测试。
+- Ramp-Up时间（秒）：这个参数表示准备时长，即设置的虚拟用户数需要多长时间全部启动。如果线程数为10，准备时长为2，那么需要2秒启动10个线程，也就是每秒启动5个线程。
+- 循环次数：每个线程发送请求的次数。如果线程数为10，循环次数为1000，那么每个线程发送1000次请求。总请求数为10×1000=10000。如果勾选了“永远”，那么所有线程会一直发送请求，直到选择停止运行脚本，如下图所示。
+
+​	对测试计划添加线程组：右键测试计划=>Add=>Threads(Users)=>ThreadGroup
+
+<div style="text-align:center;font-weight:bold;">JMeter添加线程组</div>
+
+![image-20241218090609514](images/image-20241218090609514.png)
+
+(3)新增HTTP采样器。
+
+​	采样器用于对具体的请求进行性能数据的采样，如下图所示，本章案例添加HTTP请求的采样。
+
+​	添加完HTTP采样器之后需要对请求的具体目标进行设置，比如目标服务器地址，端口号，路径等信息，具体含义如下。
+
+- 协议：向目标服务器发送HTTP请求协议，可以是HTTP或HTTPS，默认为HTTP。
+- 服务器名称或IP:HTTP请求发送的目标服务器名称或IP。
+- 端口号：目标服务器的端口号，默认值为80。
+- 方法：发送HTTP请求的方法，包括GET、POST、HEAD、PUT、OPTIONS、TRACE、DELETE等。
+- 路径：目标URL路径（URL中去掉服务器地址、端口及参数后剩余部分）。
+- 内容编码：编码方式，默认为ISO-8859-1编码，这里配置为utf-8。
+
+​	JMeter会按照设置对目标进行批量的请求。
+
+​	对线程组添加采样器：右键线程组=>Add=>Sampler=>Http Request
+
+<div style="text-align:center;font-weight:bold;">JMeter添加HTTP采样器</div>
+
+![image-20241218091403493](images/image-20241218091403493.png)
+
+(4)添加监听器。
+
+​	对于批量请求的访问结果，JMeter会以报告的形式展现出来，在监听器中，添加聚合报告，如下图所示。
+
+​	对线程组添加采样器：右键线程组=>Add=>Listener=>Aggregate Report
+
+<div style="text-align:center;font-weight:bold;">添加监听器</div>
+
+![image-20241218091737420](images/image-20241218091737420.png)
+
+​	调试运行，分析指标数据、挖掘性能瓶颈、评估系统性能状态，主要查看聚合报告的结果，聚合报告中各个指标详解如下。
+
+- Label：每个JMeter的元素（例如HTTP Request）都有一个Name属性，这里显示的就是Name属性的值。
+- #Samples：这次测试中一共发出了多少个请求，如果模拟10个用户，每个用户迭代10次，那么这里显示100。
+- Average：平均响应时间。默认情况下是单个请求的平均响应时间(ms)，当使用Transaction Controller时，以Transaction为单位显示平均响应时间。
+- Median：中位数，也就是50%用户的响应时间。
+- 90% Line:90%用户的响应时间。
+- Min：最小响应时间。
+- Max：最大响应时间。
+- Error%：错误率，即错误请求数／请求总数。
+- throughput：吞吐量。默认情况下表示每秒完成的请求数(Request per Second)。
+- KB/Sec：每秒从服务器端接收到的数据量。
+
+## 26.3 性能优化案例1：调整堆大小提高服务的吞吐量
+
+​	案例创建Spring Boot项目，以便可以通过Web访问。这里使用JMeter模拟批量请求，如下代码所示。
+
+<span style="color:#40E0D0;">案例1：Web服务</span>
+
+- 代码之People
+
+```java
+package com.coding.jvm08.tuning01;
+
+import lombok.Data;
+
+@Data
+public class People {
+    private Integer id;
+    private String name;
+    private Integer age;
+    private String sex;
+    private String job;
+}
+
+```
+
+- 代码之PeopleMapper
+
+```java
+package com.coding.jvm08.tuning01;
+
+import java.util.List;
+
+public interface PeopleMapper {
+
+    List<People> getPeopleList();
+}
+
+```
+
+- 代码之PeopleMapper.xml
+
+```xml
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.coding.jvm08.tuning01.PeopleMapper">
+    <select id="getPeopleList" resultType="com.coding.jvm08.tuning01.People">
+        select id, name, age, sex, job
+        from people;
+    </select>
+</mapper>
+```
+
+- 代码之PeopleService
+
+```java
+package com.coding.jvm08.tuning01;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class PeopleService {
+    private final PeopleMapper peopleMapper;
+
+    public List<People> getPeopleList() {
+        return peopleMapper.getPeopleList();
+    }
+}
+
+```
+
+- 代码之Tuning01Controller
+
+```java
+package com.coding.jvm08.tuning01;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+@RequiredArgsConstructor
+public class Tuning01Controller {
+
+    private final PeopleService peopleService;
+
+    @RequestMapping("/visit")
+    public List<People> visit() {
+        List<People> peopleList = peopleService.getPeopleList();
+        return peopleList;
+    }
+}
+
+```
+
+- 代码之Application
+
+```java
+package com.coding.jvm08.tuning01;
+
+import org.mybatis.spring.annotation.MapperScan;
+import org.mybatis.spring.annotation.MapperScans;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@MapperScan(value = {"com.coding.jvm08.tuning01"})
+@SpringBootApplication
+public class Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+
+}
+```
+
+- 代码之application.properties
+
+```properties
+spring.datasource.username=root
+spring.datasource.password=root123
+spring.datasource.url=jdbc:mysql://localhost:3306/jvmdb?characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+mybatis-plus.mapper-locations=classpath:mapper/**/*.xml
+mybatis-plus.global-config.db-config.id-type=auto
+```
+
+- 数据库与初始化语句
+
+```sql
+-- 创建数据库
+CREATE DATABASE IF NOT EXISTS jvmdb DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- 使用数据库
+use jvmdb;
+
+-- 创建数据表
+DROP TABLE IF EXISTS people;
+CREATE TABLE people
+(
+    `id`   INT AUTO_INCREMENT COMMENT '',
+    `name` VARCHAR(255) COMMENT '',
+    `age`  INT COMMENT '',
+    `sex`  VARCHAR(255) COMMENT '',
+    `job`  VARCHAR(255) COMMENT '',
+    PRIMARY KEY (id)
+) COMMENT = '';
+-- 初始化数据：建议配置为500条
+INSERT INTO jvmdb.people (name,age,sex,job) VALUES
+                                                ('张三','18','男','待定岗'),
+                                                ('张三','18','男','待定岗');
+
+```
+
+​	采用定量分析法，线程组配置保持不变，配置如下。
+
+<div style="text-align:center;font-weight:bold;">JMeter线程组配置</div>
+
+| 线程数 | Ramp-Up时间（秒） | 循环次数 |
+| :----: | :---------------: | :------: |
+|   30   |        10         |   1000   |
+
+​	JVM配置如下。
+
+```bash
+-Xms30M
+-Xmx30M
+-XX:MetaspaceSize=64M
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/tuning01_gc.log
+```
+
+​	启动Spring Boot工程，运行JMeter，查看JMeter吞吐量，如下表所示，这里测试三次数据，最后取平均值。
+
+<div style="text-align:center;font-weight:bold;">JMeter吞吐量</div>
+
+| 第一轮 | 第二轮 | 第三轮 | 平均值 |
+| :----: | :----: | :----: | :----: |
+| 1331.1 | 1319.3 | 1324.6 | 1325.0 |
+
+<div style="text-align:center;font-weight:bold;">jstat查看GC情况</div>
+
+![image-20241221181226356](images/image-20241221181226356.png)
+
+​	修改JVM配置，增加初始化内存和最大内存配置，如下所示。
+
+```bash
+-Xms60M
+-Xmx60M
+-XX:MetaspaceSize=64M
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/tuning01_gc.log
+```
+
+​	重启Spring Boot工程，运行JMeter，查看JMeter吞吐量，如下表所示。
+
+<div style="text-align:center;font-weight:bold;">JMeter吞吐量</div>
+
+| 第一轮 | 第二轮 | 第三轮 | 平均值 |
+| :----: | :----: | :----: | :----: |
+| 2306.8 | 2236.1 | 2115.7 | 2219.5 |
+
+<div style="text-align:center;font-weight:bold;">jstat查看GC情况</div>
+
+![image-20241221181902060](images/image-20241221181902060.png)
+
+​	通过两次JMeter吞吐量的对比发现，在增大内存之后，吞吐量明显增强。通过jstat命令查看GC状态，展示了增大内存之前的GC状态，其中Full GC次数高达107次，Full GC时间为12.277s。增大内存之后的Full GC状态，其中Full GC次数为67次，GC时间为7.431s。发现增大内存之后，Full GC的次数明显减少，这样系统暂停时间就会减少，所以每秒处理的请求数量就会增多。
+
+​	通过上面的对比发现，在增大内存之后，吞吐量明显增强。<span style="color:red;font-weight:bold;">提高内存后，GC变少，吞吐量增加。</span>
+
+## 26.4 性能优化案例2：调整垃圾收集器提高服务的吞吐量
+
+​	前面的章节讲解了不同的垃圾收集器，下文将测试不同的垃圾收集器对系统服务性能的影响。
+
+​	依旧使用代码<span style="color:blue;font-weight:bold;">案例1：Web服务</span>。
+
+<div style="text-align:center;font-weight:bold;">JMeter线程组配置</div>
+
+| 线程数 | Ramp-Up时间（秒） | 循环次数 |
+| :----: | :---------------: | :------: |
+|   30   |        10         |   1000   |
+
+​	使用串行垃圾收集器，服务器JVM配置如下。
+
+```bash
+-Xms30M
+-Xmx30M
+-XX:SurvivorRatio=8
+-XX:MetaspaceSize=64M
+-XX:+UseSerialGC
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/tuning01_gc.log
+```
+
+​	重启Spring Boot工程，运行JMeter，查看JMeter吞吐量如下表所示，这里测试三次数据，最后取平均值。
+
+| 第一轮 | 第二轮 | 第三轮 | 平均值 |
+| :----: | :----: | :----: | :----: |
+| 516.7  | 497.1  | 486.9  | 500.2  |
+
+​		修改JVM配置，调整垃圾收集器，如下所示。
+
+```bash
+-Xms30M
+-Xmx30M
+-XX:SurvivorRatio=8
+-XX:MetaspaceSize=64M
+-XX:+UseParallelGC
+-XX:+UseParallelOldGC
+-XX:ParallelGCThreads=4
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/tuning01_gc.log
+```
+
+​	重启Spring Boot工程，运行JMeter，查看JMeter吞吐量，如下表所示。
+
+| 第一轮 | 第二轮 | 第三轮 | 平均值 |
+| :----: | :----: | :----: | :----: |
+| 791.1  | 735.7  | 729.8  | 752.2  |
+
+​	通过上面两表的对比发现，在改为并行垃圾收集器之后，吞吐量明显增强。这是因为并行垃圾收集器在串行垃圾收集器的基础上做了优化，垃圾收集由单线程变成了多线程，这样可以缩短垃圾收集的时间。虽然并行垃圾收集器在收集过程中也会暂停应用程序，但是多线程并行执行速度更快，暂停时间也就更短，系统的吞吐量随之提升。
+
+​	接下来我们改为G1收集器看看效果，修改JVM参数配置，将垃圾收集器改为G1，配置参数如下。
+
+```bash
+-Xms30M
+-Xmx30M
+-XX:SurvivorRatio=8
+-XX:MetaspaceSize=64M
+-XX:+UnlockExperimentalVMOptions
+-XX:+UseG1GC
+-XX:ConcGCThreads=4
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/tuning01_gc.log
+```
+
+​	重启Spring Boot工程，运行JMeter，查看JMeter吞吐量，如下表所示。
+
+| 第一轮 | 第二轮 | 第三轮 | 平均值 |
+| :----: | :----: | :----: | :----: |
+| 452.2  | 424.3  | 455.0  | 443.8  |
+
+​	查看压测效果，吞吐量比并行收集器效果差一些，<span style="color:red;font-weight:bold;">看来G1GC尚在实验性阶段，效果并不好</span>。
+
+​	综上，当各位读者在工作中如果服务器的垃圾收集时间较长，或者对请求的处理性能没有达到目标要求的时候，可以考虑使用不同的垃圾收集器来做优化。
+
+## 26.5 性能优化案例3：JIT优化
+
+​	前面章节讲了OOM和垃圾收集器的选择优化。下文从JVM的执行机制层面来优化JVM。
+
+​	第12章讲过Java为了提高JVM的执行效率，提出了一种叫作即时编译(JIT)的技术。即时编译的目的是避免函数被解释执行，而是将整个函数体编译成机器码，每次函数执行时，只执行编译后的机器码即可，这种方式可以使执行效率大幅度提升。根据二八定律（百分之二十的代码占据百分之八十的系统资源），对于大部分不常用的代码，我们无须耗时将之编译为机器码，而是采用解释执行的方式，用到就去逐条解释运行。对于一些仅占据较少系统资源的热点代码（可认为是反复执行的重要代码），则可将之翻译为符合机器的机器码高效执行，提高程序的执行效率。
+
+**1 即时编译的时间开销**
+
+​	通常说JIT比解释快，其实说的是“执行编译后的代码”比“解释器解释执行”要快，并不是说“编译”这个动作比“解释”这个动作快。JIT编译再怎么快，至少也比解释执行一次略慢一些，而要得到最后的执行结果还得再经过一个“执行编译后的代码”的过程。所以，对“只执行一次”的代码而言，解释执行其实总是比JIT编译执行要快。只有频繁执行的代码（热点代码），JIT编译才能保证有正面的收益。
+
+**2 即时编译的空间开销**
+
+​	对一般的Java方法而言，编译后代码的大小相对于字节码的大小，膨胀比达到10倍是很正常的。同上面说的时间开销一样，这里的空间开销也是，只有执行频繁的代码才值得编译，如果把所有代码都编译则会显著增加代码所占空间，导致代码爆炸。这也就解释了为什么有些JVM会选择不总是做JIT编译，而是选择用解释器和JIT编译器的混合执行引擎。
+
+​	具体的即时编译案例在第7章讲解堆的时候已经详细描述过了，这里不再做具体的案例分析，各位读者在工作中可以考虑在代码层面进行优化。
+
+## 26.6 性能优化案例4：G1并发执行的线程数对性能的影响
+
+​	依然使用代码<span style="color:blue;font-weight:bold;">案例1：Web服务</span>，初始化内存和最大内存调整小一些，目的是让程序发生Full GC，关注点是GC次数、GC时间，以及JMeter的平均响应时间。
+
+<div style="text-align:center;font-weight:bold;">JMeter线程组配置</div>
+
+| 线程数 | Ramp-Up时间（秒） | 循环次数 |
+| :----: | :---------------: | :------: |
+|   30   |        10         |   1000   |
+
+​	JVM配置如下，并发线程数量为2。
+
+```bash
+-Xms40M
+-Xmx40M
+-XX:SurvivorRatio=8
+-XX:MetaspaceSize=64M
+-XX:+UnlockExperimentalVMOptions
+-XX:+UseG1GC
+-XX:ConcGCThreads=2
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/tuning01_gc.log
+```
+
+​	重启Spring Boot工程，运行JMeter，查看JMeter吞吐量，如下表所示。
+
+<div style="text-align:center;font-weight:bold;">jstat查看GC情况</div>
+
+![image-20241221203125762](images/image-20241221203125762.png)
+
+​	由此可以计算出压测过程中，发生的GC次数和GC时间差。
+
+```bash
+YGC:youngGC次数是 5319 - 21 = 5298
+FGC:Full GC次数是 58 - 0 = 58
+GCT:GC总时间是 6.696 - 0.047 = 6.649
+```
+
+​	压测结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JMeter聚合报告</div>
+
+![image-20241221203447944](images/image-20241221203447944.png)
+
+​	从上图中可以看到95%的请求响应时间为14ms,99%的请求响应时间为43ms。
+
+​	下面我们设置并发线程数量为1，如下所示。
+
+```bash
+-Xms40M
+-Xmx40M
+-XX:SurvivorRatio=8
+-XX:MetaspaceSize=64M
+-XX:+UnlockExperimentalVMOptions
+-XX:+UseG1GC
+-XX:ConcGCThreads=1
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/tuning01_gc.log
+```
+
+​	重启Spring Boot工程，运行JMeter，查看JMeter吞吐量，如下表所示。
+
+![image-20241221204154311](images/image-20241221204154311.png)
+
+​	由此可以计算出压测过程中，发生的GC次数和GC时间差。
+
+```bash
+YGC:youngGC次数是 5352 - 18 = 5334
+FGC:Full GC次数是 96 - 0 = 96
+GCT:GC总时间是 7.943 - 0.034 = 7.929
+```
+
+​	压测结果如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JMeter聚合报告</div>
+
+![image-20241221204408701](images/image-20241221204408701.png)
+
+​	图上图可知，95%的请求响应时间为35ms,99%的请求响应时间为45ms。通过对比发现设置线程数为1之后，服务请求的平均响应时间和GC时间都有一个明显的增加。仅从效果上来看，这次的优化是有一定效果的。大家在工作中对于线上项目进行优化的时候，可以考虑到这方面的优化。
+
+## 26.7 性能优化案例5：合理配置堆内存
+
+​	在案例1中我们讲到了增加内存可以提高系统的性能而且效果显著，那么随之带来的一个问题就是，增加多少内存比较合适？如果内存过大，那么产生Full GC的时候，GC时间会相对比较长；如果内存较小，那么就会频繁的触发GC，在这种情况下，我们该如何合理配置堆内存大小呢？可以根据Java Performance里面的推荐公式来进行设置，如下图所示。
+
+​	公式的意思是Java中整个堆大小设置原则是Xmx和Xms设置为老年代存活对象的3～4倍，即Full GC之后堆内存是老年代内存的3～4倍。方法区（永久代PermSize和MaxPermSize）设置为老年代存活对象的1.2～1.5倍。新生代Xmn的设置为老年代存活对象的1～1.5倍。老年代的内存大小设置为老年代存活对象的2～3倍。
+
+<div style="text-align:center;font-weight:bold;">Java Performance</div>
+
+![image-20241220170054419](images/image-20241220170054419.png)
+
+​	但是，上面的说法也不是绝对的，也就是说这给的是一个参考值，根据多次调优之后得出的一个结论，大家可以根据这个值来设置初始化内存。在保证程序正常运行的情况下，我们还要去查看GC的回收率，GC停顿耗时，内存里的实际数据来判断，Full GC是基本上不能太频繁的，如果频繁就要做内存分析，然后再去做一个合理的内存分配。还要注意到一点就是，老年代存活对象怎么去判定。计算老年代存活对象的方式有以下2种。
+
+​	方式1:JVM参数中添加GC日志，GC日志中会记录每次Full GC之后各代的内存大小，观察老年代GC之后的空间大小。可观察一段时间内（比如2天）的Full GC之后的内存情况，根据多次的Full GC之后的老年代的空间大小数据来预估Full GC之后老年代的存活对象大小（可根据多次Full GC之后的内存大小取平均值）。
+
+​	方式2：方式1的方案虽然可行，但需要更改JVM参数，并分析日志。同时，在使用CMS收集器的时候，有可能无法触发Full GC（只发生CMS GC），所以日志中并没有记录Full GC的日志，在分析的时候就比较难处理。所以，有时候需要强制触发一次Full GC，来观察Full GC之后的老年代存活对象大小。需要注意的是强制触发Full GC，会造成线上服务停顿(STW)，要谨慎。我们建议在强制Full GC前先把服务节点摘除，Full GC之后再将服务挂回可用节点，使之对外提供服务。在不同时间段触发Full GC，根据多次Full GC之后的老年代内存情况来预估Full GC之后的老年代存活对象大小，触发Full GC的方式有下面三种。
+
+​	(1)使用如下命令将当前的存活对象dump到文件，此时会触发Full GC。
+
+```bash
+jmap -dump:live,format=b,file=heap.bin <pid>
+```
+
+​	(2)使用如下命令打印每个class的实例数目、内存占用和类全名信息，此时会触发Full GC。
+
+```bash
+jmap -histo:live <pid>
+```
+
+​	(3)在性能测试环境，可以通过Java监控工具来触发Full GC，比如使用VisualVM和JConsole，这些工具在最新的JDK的bin目录下可以找到。VisualVM或者JConsole上面有一个触发GC的按钮，在第21章有讲过，此处不再赘述。
+
+
+
+​	依旧使用代码<span style="color:blue;font-weight:bold;">案例1：Web服务</span>。
+
+<div style="text-align:center;font-weight:bold;">JMeter线程组配置</div>
+
+| 线程数 | Ramp-Up时间（秒） | 循环次数 |
+| :----: | :---------------: | :------: |
+|   30   |        10         |   1000   |
+
+​	最开始可以将内存设置得大一些，比如设置为4GB。当然也可以根据业务系统估算，比如从数据库获取一条数据占用128字节，每次需要获取1000条数据，那么一次读取到内存的大小就是(128/1024/1024)×1000=0.122MB，程序可能需要并发读取，比如每秒读取1000次，那么内存占用就是0.122×1000=12MB，如果堆内存设置为1GB，新生代大小大约就是333MB，那么每333/12=27.75s就会把新生代内存填满，也就是说我们的程序几乎每分钟进行两次Young GC。
+
+​	现在我们通过IDEA启动Spring Boot工程，将内存初始化为1024MB。这里就从1024MB的内存开始分析系统的GC日志，根据上面的一些知识来进行一个合理的内存设置。
+
+​	JVM设置如下。
+
+```bash
+-Xms1024M
+-Xmx1024M
+-Xss512K
+-XX:SurvivorRatio=8
+-XX:MetaspaceSize=64M
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/tuning01_gc.log
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/Users/wenqiu/Misc/tuning01_dump.hprof
+```
+
+​	通过JMeter访问一段时间后，主要是看项目是否可以正常运行，使用下面的命令查看JVM统计信息状态。
+
+​	JVM统计信息如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JVM统计信息</div>
+
+![image-20241221211544753](images/image-20241221211544753.png)
+
+​	从上图中可以得出如下信息。
+
+```bash
+YGC平均耗时: (0.200 - 0.009) * 1000 / (197 - 1) = 0.97ms
+FGC未产生
+```
+
+<div style="text-align:center;font-weight:bold;">JMeter聚合报告</div>
+
+![image-20241221220137706](images/image-20241221220137706.png)
+
+​	看起来似乎不错，YGC触发的频率不高，FGC也没有产生，但这样的内存设置是否还可以继续优化呢？是不是有一些空间是浪费的呢？
+
+​	为了快速看数据，我们使用了方式2，通过命令 jmap -histo:live pid 产生几次Full GC,Full GC之后，使用jmap -heap来查看当前的堆内存情况。
+
+​	通过VisualVM观察老年代存活对象大小。
+
+<div style="text-align:center;font-weight:bold;">内存空间分配</div>
+
+![image-20241221215034802](images/image-20241221215034802.png)
+
+​	可以看到老年代存活对象占用内存空间大概为16.101MB，老年代的内存分配为683MB左右。按照整个堆大小是老年代Full GC之后的3～4倍计算的话，设置堆内存在Xmx=17×3 = 51MB至17×4 = 68MB之间。
+
+​	我们修改堆内存大小为70MB,JVM参数设置如下所示。
+
+```bash
+-Xms70M
+-Xmx70M
+-Xss512K
+-XX:SurvivorRatio=8
+-XX:MetaspaceSize=64M
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/tuning01_gc.log
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/Users/wenqiu/Misc/tuning01_dump.hprof
+```
+
+​	修改完之后，查看JVM统计信息，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JVM统计信息</div>
+
+![image-20241221220605403](images/image-20241221220605403.png)
+
+​	从上图中可以得出如下信息。
+
+```bash
+YGC平均耗时: (1.874 - 0.021) * 1000 / (3162 - 13) = 0.59ms
+FGC平均耗时: (0.067 - 0.000) * 1000 / (3 - 0) = 22.33ms
+```
+
+<div style="text-align:center;font-weight:bold;">JMeter聚合报告</div>
+
+![image-20241221220426165](images/image-20241221220426165.png)
+
+​	观察到，产生了FGC，需要再扩大点内存容量，比如：100MB。
+
+<div style="text-align:center;font-weight:bold;">JVM统计信息</div>
+
+![image-20241221223555035](images/image-20241221223555035.png)
+
+​	从上图中可以得出如下信息。
+
+```bash
+YGC平均耗时: (1.319 - 0.016) * 1000 / (2079 - 9) = 0.63ms
+FGC未产生
+```
+
+<div style="text-align:center;font-weight:bold;">JMeter聚合报告</div>
+
+![image-20241221223821832](images/image-20241221223821832.png)
+
+​	修改完之后YGC平均耗时为0.63ms，没有产生Full GC。整体的GC耗时减少。但GC频率比之前的1024M时要多一些。依然未产生Full GC，所以我们内存设置为100MB也是比较合理的，相对之前节省了很大一块内存空间，所以本次内存调整是比较合理的。
+
+​	再次手动触发Full GC，查看堆内存结构，如下图所示，可以发现堆内存足够使用。
+
+<div style="text-align:center;font-weight:bold;">内存空间分配</div>
+
+![image-20241221224146666](images/image-20241221224146666.png)
+
+​	从以上试验得知在内存相对紧张的情况下，可以按照上述的方式来进行内存的调优，找到一个在GC频率和GC耗时上都可接受的内存设置，用较小的内存满足当前的服务需要。
+
+​	但当内存相对宽裕的时候，可以相对给服务多增加一点内存，减少GC的频率。一般要求低延时的可以考虑多设置一点内存，对延时要求不高的，可以按照上述方式设置较小内存。
+
+​	如果在垃圾收集日志中观察到堆内存发生OOM，尝试把堆内存扩大到物理内存的80%～90%。在扩大了内存之后，再检查垃圾收集日志，直到没有OOM为止。如果应用运行在稳定状态下没有OOM就可以进入下一步了，计算活动对象的大小。
+
+## 26.8 性能优化案例6：CPU占用很高排查方案【未完待续】
+
+​	当系统出现卡顿或者应用程序的响应速度非常慢，就可能要考虑到服务器上排查一番，作为应用负责人，都希望自己负责的应用能够在线上环境运行顺畅，不出任何错误，也不产生任何告警，当然这是最理想的结果。可实际上应用总会在不经意间发生一些意外的情况，例如CPU偏高、内存占用偏高、应用没有响应、应用自动挂掉等。这里分享的案例是关于如何排查CPU偏高的问题。代码清单26-2用于模拟应用CPU占用偏高。大家都知道，如果某个线程一直对这个CPU的占用不释放，会把这个CPU给占满，其他线程无法使用，如果机器核数比较低，那么就会感觉到明显的卡顿。
+
+## 26.9 性能优化案例7：日均百万级订单交易系统设置JVM参数
+
+​	每天百万级订单绝对是现在顶尖电商公司的交易量级。百万级订单一般在4小时内产生，我们计算一下每秒产生多少订单：3000000/4/3600 = 208单/s，为了方便计算，我们按照每秒300单来计算。
+
+​	这种系统一般至少需要三四台机器去支撑，假设我们部署了三台机器，也就是每台机器每秒大概处理100单，也就是每秒大概有100个订单对象在堆空间的新生代内生成，一个订单对象的大小跟里面的字段多少及类型有关，比如int类型的订单id和用户id等字段，double类型的订单金额等，int类型占用4字节，double类型占用8字节，粗略估计一个订单对象大概是1KB，也就是说每秒会有100KB的订单对象分配在新生代内，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">每秒产生订单对象大小</div>
+
+<img src="images/image-20241222083559369.png" alt="image-20241222083559369" style="zoom:50%;" />
+
+​	真实的订单交易系统肯定还有大量的其他业务对象，比如购物车、优惠券、积分、用户信息、物流信息等，实际每秒分配在新生代内的对象大小应该要再扩大几十倍，假设是20倍，也就是每秒订单系统会往新生代内分配近2MB的对象数据，这些数据在订单提交的操作做完之后，基本都会成为垃圾对象，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">模拟实际交易场景每秒产生订单对象大小</div>
+
+<img src="images/image-20241222084301435.png" alt="image-20241222084301435" style="zoom: 33%;" />
+
+​	假设我们选择4核8G的服务器，JVM堆内存分到4GB左右，于是给新生代至少分配1GB，这样差不多需要650秒可以把新生代占满，进而触发Minor GC，这样的GC频率是可以接受的，如下图所示。另外，也可以继续调整新生代大小，新生代和老年代比例不一定必须是1:2，这样也可以降低GC频率，进入老年代的对象也会降低，减少Full GC频率。
+
+<div style="text-align:center;font-weight:bold;">内存分配和内存回收频率</div>
+
+<img src="images/image-20241222090241426.png" alt="image-20241222090241426" style="zoom:50%;" />
+
+​	如果系统业务量继续增长，那么可以水平扩容增加更多的机器，比如5台甚至10台机器，这样每台机器的JVM处理请求可以保证在合适范围，不致因压力过大导致大量的GC。
+
+​	假设业务量暴增几十倍，在不增加机器的前提下，整个系统每秒要生成几千个订单，之前每秒往新生代里分配的2MB对象数据可能增长到几十兆，而且因为系统压力骤增，一个订单的生成不一定能在1秒内完成，可能要几秒甚至几十秒，那么就有很多对象会在新生代里存活几十秒之后才会变为垃圾对象，如果新生代只分配了几百兆，意味着一二十秒就会触发一次Minor GC，那么很有可能部分对象就会被挪到老年代，这些对象到了老年代后因为对应的业务操作执行完毕，马上又变为了垃圾对象，随着系统不断运行，被挪到老年代的对象会越来越多，最终可能又会导致Full GC，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">JVM参数设置流程</div>
+
+<img src="images/image-20241222090506086.png" alt="image-20241222090506086" style="zoom:50%;" />
+
+## 26.10 性能优化案例8：综合性能优化【未完待续】
+
+​	本案例将模拟生产环境中出现的高占用CPU和OOM问题的出现对系统进行优化，程序如下代码所示。
+
+<span style="color:#40E0D0;">案例1：综合性能优化案例</span>
+
+- 代码
+
+```java
+package com.coding.jvm08.tuning02;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.concurrent.CustomizableThreadFactory;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.concurrent.*;
+
+@RestController
+@RequiredArgsConstructor
+public class Tuning02Controller {
+
+    @RequestMapping("/getData")
+    public Void visit() {
+        // 1、创建线程池
+        int count = 7;
+        ThreadFactory builder = new CustomizableThreadFactory("BizThreadPool-%d");
+        ExecutorService executorService = new ThreadPoolExecutor(count, count, 2, TimeUnit.HOURS, new ArrayBlockingQueue<>(10), builder);
+
+        // 模拟获取商品信息
+        CompletableFuture<Object> productList =
+                CompletableFuture.supplyAsync(
+                        () -> {
+                            while (true) {
+                            }
+                        },
+                        executorService);
+
+        // 模拟获取商品价格
+        CompletableFuture<Object> productPrice = CompletableFuture.supplyAsync(
+                () -> {
+                    for (int i = 0; i < Long.MAX_VALUE; i++) {
+                        System.out.println("商品价格为： " + 10 + " 元");
+                        try {
+                            // 模拟 I/O 等待、切换
+                            Thread.sleep(20);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    return null;
+                },
+                executorService);
+
+        // 模拟获取商品分类信息
+        CompletableFuture<Object> productClassify = CompletableFuture.supplyAsync(() -> {
+            for (int i = 0; i < Integer.MAX_VALUE; i++) {
+            }
+            System.out.println("商品分类为：电子商品");
+            return null;
+        }, executorService);
+
+        CompletableFuture.anyOf(productList, productPrice, productClassify).join();
+        return null;
+    }
+}
+
+```
+
+​	案例中模拟一个Web网站请求后台数据的接口，当用户访问一个页面时，后台有可能调用多个服务，比如请求商品详情页面，需要调用商品信息、商品价格，以及商品分类等信息。如果在该服务中，对上面几个服务进行串行调用，无疑会增加服务的响应时间，造成用户体验非常差，所以这里采用了异步编排技术(CompletableFuture)和线程池来对各个服务进行异步调用，这样可以最大程度提升系统响应时间。
+
+​	代码中，“模拟获取商品信息服务”使用了死循环代码，这里只是为了模拟在服务调用过程中出现的线程长时间占用CPU的情况，和前面讲到的案例6一样。模拟“获取商品价格服务”中线程每次休眠20 ms，是用于模拟I/O等待、切换。模拟“获取商品分类信息”服务中使用了有限的循环次数，这样做是为了保证服务最终可以被正常调用，不会出现请求一直等待的状态。
+
+​	启动SpringBoot服务，JVM配置如下。
+
+```bash
+-Xms600M
+-Xmx600M
+-XX:SurvivorRatio=8
+-XX:MetaspaceSize=64M
+-XX:+UnlockExperimentalVMOptions
+-XX:+UseG1GC
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-Xloggc:/Users/wenqiu/Misc/tuning02_gc.log
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/Users/wenqiu/Misc/tuning02_dump.hprof
+```
+
+​	通过top命令查看机器状态，机器负载以及CPU占用率均正常，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">top命令查看机器状态(1)</div>
+
+![image-20241222104225297](images/image-20241222104225297.png)
+
+
+
+​	可以看到此时机器运行状态无异常，通过请求访问服务，浏览器输入以下地址 http://localhost:8080/getData 。再次通过top命令查看机器状态，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">top命令查看机器状态(2)</div>
+
+![image-20241222104247629](images/image-20241222104247629.png)
+
+
+
+​	各位读者可以发现，其中只有Cpu1处于100%的状态，但是如果“获取商品价格服务”中线程删除每次休眠50 ms，不再用于模拟I/O等待、切换，那么此时就会有两个CPU处于100%的状态，为了验证“获取商品价格服务”一直处于运行状态，可以查看日志信息，如下所示。
+
+```bash
+商品价格为：10元￼
+商品价格为：10元￼
+商品价格为：10元￼
+商品价格为：10元￼
+商品价格为：10元￼
+商品价格为：10元￼
+商品价格为：10元￼
+商品价格为：10元￼
+商品价格为：10元￼
+商品价格为：10元￼
+商品价格为：10元￼
+商品价格为：10元
+```
+
+​	可以发现，日志一直处于打印状态，说明线程一直在运行。这两段代码说明了一个问题，一个满载运行的线程（不停执行“计算”型操作时）可以把单个核心的利用率全部占用，多核心CPU最多只能同时执行等于核心数的满载线程数，在本机器中，最多只能同时执行4个线程。当项目中存在I/O等暂停类操作时，CPU处于空闲状态，操作系统调度CPU执行其他线程，可以提高CPU利用率，同时执行更多的线程。本案例使用线程休眠来模拟该操作，其他的I/O操作例如在项目中需要大量数据插入数据库，或者打印了大量的日志信息等操作（注意，如果打印日志信息过多，会造成服务运行时间加长，但是机器的负载不会增加，工作中还是要尽量打印简洁明了的日志信息）。
+
+​	进行多次请求，此时再通过top命令查看机器性能，每多一次请求，就多一个CPU核心利用率被占满，如下图所示。
+
+<div style="text-align:center;font-weight:bold;">top命令查看机器状态(3)</div>
+
+![image-20241222104423425](images/image-20241222104423425.png)
+
+​	使用案例6中的解决方案进行问题定位。
 
 # 分割线========================
 
@@ -16192,20 +17503,6 @@ java.lang.OutOfMemoryError:Java heap space
 #### 栈上分配、TLAB、PLAB
 
 ![img](images/345fb491ba0a490ebd96d65c20d3a59e.png)
-
-# 六、性能调优（<span style="color:red;font-weight:bold;">下篇</span>）
-
-## 1、OOM常见各种常见及解决方案
-
-### 1.1、案例1：堆溢出
-
-### 1.2、案例2：元空间溢出
-
-### 1.3、案例3：GC overhead limit exceeded
-
-### 1.4、案例4：线程溢出
-
-
 
 ## 2、性能优化案例
 

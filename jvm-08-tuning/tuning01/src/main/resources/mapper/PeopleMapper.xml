@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.coding.jvm08.tuning01.PeopleMapper">
+    <select id="getPeopleList" resultType="com.coding.jvm08.tuning01.People">
+        select id, name, age, sex, job
+        from people;
+    </select>
+</mapper>

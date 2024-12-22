@@ -3,7 +3,14 @@ package com.coding.jvm06.gc;
 import java.util.ArrayList;
 
 /**
- * -Xms8m -Xmx8m -XX:+HeapDumpOnOutOfMemoryError
+ * -Xms200M
+ * -Xmx200M
+ * -XX:MetaspaceSize=64M
+ * -XX:+PrintGCDetails
+ * -XX:+PrintGCDateStamps
+ * -Xloggc:/Users/wenqiu/Misc/gc-oom.log
+ * -XX:+HeapDumpOnOutOfMemoryError
+ * -XX:HeapDumpPath=/Users/wenqiu/Misc/heapdump.hprof
  */
 public class HeapOOM {
     byte[] buffer = new byte[1 * 1024 * 1024]; // 1MB

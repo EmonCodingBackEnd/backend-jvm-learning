@@ -25,6 +25,7 @@
         <module>jvm-05-jni</module>
         <module>jvm-06-gc</module>
         <module>jvm-07-tools</module>
+        <module>jvm-08-tuning</module>
     </modules>
 
     <properties>
