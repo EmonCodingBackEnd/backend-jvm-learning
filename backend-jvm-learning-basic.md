@@ -14,10 +14,6 @@ https://www.bilibili.com/video/BV1Dz4y1A7FB/?spm_id_from=333.788.recommend_more_
 
 https://weread.qq.com/web/reader/30932dd0813ab8194g0175fdk8e232ec02198e296a067180（剑指JVM）
 
-Linux：
-
-https://www.bilibili.com/video/BV1Sv411r7vd/?spm_id_from=333.337.search-card.all.click&vd_source=b850b3a29a70c8eb888ce7dff776a5d1
-
 JDK8文档：https://docs.oracle.com/javase/8/docs
 
 JDK下载：https://www.oracle.com/java/technologies/downloads/
